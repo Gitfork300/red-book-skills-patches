@@ -1,0 +1,23 @@
+# ── Python 编译产物 ──────────────────────────────
+__pycache__/
+*.py[cod]
+
+# ── core-overrides 自动备份 ──────────────────────
+# 每次 apply_overrides.py apply 前会把本体文件备份到 state/backup/<ts>/。
+# 不入库：一是随每次 apply 无限增长，二是内容可由 overrides/ 重放得到。
+core-overrides/state/backup/
+
+# ── 日志/状态备份 ────────────────────────────────
+*.bak
+
+# ── 编辑器 / 系统 ────────────────────────────────
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ── 刻意保留入库的内容 ───────────────────────────
+# 各 patch 的 state/*.json（publish_log / update_state / applied /
+# pending_pool / abandoned / inflight）体积小，且跨机器同步时是
+# 需要的判据数据，故不排除。

@@ -1,0 +1,16 @@
+{
+  "name": "safe-wording-guard",
+  "version": "0.4.1",
+  "patch_for": "red-book-skills",
+  "applies_to_main_version": ">=0.1.0",
+  "priority": 15,
+  "author": "Eric",
+  "created": "2026-09-06",
+  "updated": "2026-09-11",
+  "dependencies": [],
+  "conflict_points": [],
+  "files": [
+    "SKILL.md",
+    "helpers/check_wording.py"
+  ]
+}

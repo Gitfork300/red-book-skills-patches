@@ -1,0 +1,24 @@
+{
+  "name": "windows-sandbox-workaround",
+  "version": "1.5.0",
+  "patch_for": "red-book-skills",
+  "applies_to_main_version": ">=0.1.0",
+  "priority": 10,
+  "author": "Eric",
+  "created": "2026-09-04",
+  "dependencies": [
+    {
+      "patch": "publish-interval-guard",
+      "optional": true,
+      "via": "XHS_INTERVAL_GUARD",
+      "description": "通过环境变量指向 publish-interval-guard 的 helper，自动在 publish 前 wait、publish 后 record"
+    }
+  ],
+  "conflict_points": [],
+  "files": [
+    "SKILL.md",
+    "helpers/xhs_login_wait.py",
+    "helpers/xhs_focus.ps1",
+    "helpers/net_probe.py"
+  ]
+}

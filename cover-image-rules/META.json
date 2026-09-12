@@ -1,0 +1,14 @@
+{
+  "name": "cover-image-rules",
+  "version": "1.2.0",
+  "patch_for": "red-book-skills",
+  "applies_to_main_version": ">=0.1.0",
+  "priority": 50,
+  "author": "Eric",
+  "created": "2026-09-04",
+  "dependencies": [],
+  "conflict_points": [],
+  "files": [
+    "SKILL.md"
+  ]
+}

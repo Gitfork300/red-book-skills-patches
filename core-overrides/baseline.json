@@ -1,0 +1,26 @@
+{
+  "upstream_repo": "aus666666/red-book-skills",
+  "baseline_commit": "b006891ab1ab977b74ddd1b5a034ecc298248f7d",
+  "baseline_date": "2026-08-27T10:28:53Z",
+  "captured_at": "2026-09-12T09:48:18+08:00",
+  "hash_algo": "sha256(行尾归一化为 LF 且去 BOM 后)",
+  "purpose": "判断上游是否也改动了被本 patch 覆盖的文件；若上游 hash 变了，OVERWRITE 会丢上游改动，需人工合并",
+  "files": {
+    "SKILL.md": {
+      "upstream_sha256": "68a233e80c200bc34d8371b489aa98f3337c3b43141b199d7c13d18d17990262",
+      "override_sha256": "4082d543e913f19ed022cabe351dac37d6e42343ac4041d069aab12a2a82b67f"
+    },
+    "scripts/cdp_publish.py": {
+      "upstream_sha256": "af57ffbbba93e91e2f3c37d886f3c70e2b986355ea66736272149d42a1f93534",
+      "override_sha256": "700317b46e67bb17fdba22de300e524124a11ec51a5bafa33cdbb4fefb3d7390"
+    },
+    "scripts/chrome_launcher.py": {
+      "upstream_sha256": "a6e2f4b31958a25c7b51662143a1ccacc631e119e0d6e9b7dca2808e2c97b21a",
+      "override_sha256": "0c90b88cff452daee0ccb278cbe1015ca62a64e2a1d42ae7a5c6fb1cd2347512"
+    },
+    "scripts/publish_pipeline.py": {
+      "upstream_sha256": "25d9f60193fd45fcc3624327f0a907373fdb0335bd80a869daa3a0e67d18ce09",
+      "override_sha256": "1cc9f38a379618923b4d75478d64eef09e1358603a0117b9916f06c654eee4f9"
+    }
+  }
+}

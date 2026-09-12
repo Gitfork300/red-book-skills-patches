@@ -1,0 +1,18 @@
+{
+  "name": "publish-preflight-guard",
+  "version": "1.8.0",
+  "patch_for": "red-book-skills",
+  "applies_to_main_version": ">=0.1.0",
+  "priority": 25,
+  "author": "Eric",
+  "created": "2026-09-11",
+  "dependencies": [
+    "safe-wording-guard",
+    "cover-image-rules",
+    "writing-facts-only"
+  ],
+  "conflict_points": [],
+  "files": [
+    "SKILL.md"
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "last_check_epoch": 1789177012.8368695,
+  "last_check_iso": "2026-09-12T09:36:52+08:00",
+  "last_check_status": "ok",
+  "last_known_sha": "b006891ab1ab977b74ddd1b5a034ecc298248f7d",
+  "last_known_iso": "2026-08-27T10:28:53Z",
+  "last_known_message": "Update README.md",
+  "last_notified_sha": "b006891ab1ab977b74ddd1b5a034ecc298248f7d",
+  "interval_sec": 518400
+}
