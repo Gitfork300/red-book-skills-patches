@@ -32,7 +32,7 @@ P=~/.workbuddy/skills/red-book-skills-patches
 $PY $P/update-checker/helpers/update_check.py diff-local
 #    看到「覆盖层冲突检查」报 !! → 先停止，按「覆盖层冲突处理」合并
 
-# 1. 覆盖本体（本体不是 git 仓库，见下节）
+# 1. 覆盖本体（本体已 git 化，但仍需 tarball 覆盖 —— 见下节）
 #    ...
 
 # 2. 重新应用我们的覆盖
@@ -50,13 +50,32 @@ $PY $P/core-overrides/helpers/apply_overrides.py verify   # 预期 OK
 $PY $P/update-checker/helpers/update_check.py acknowledge --sha <新 sha>
 ```
 
-## 本体不是 git 仓库 —— 同步方式不是 `git pull`
+## 本体已 git 化（2026-09-12）—— 但仍不能靠 `git pull` 同步
 
-`~/.workbuddy/skills/red-book-skills/` 是**拷贝安装**的，没有 `.git`：
+`~/.workbuddy/skills/red-book-skills/` 现在**是** git 仓库，但用法与普通仓库不同：
 
-- ⚠️ 旧文档里的 `cd <本体> && git pull origin main` **会直接失败**
-  （`fatal: not a git repository`），不要照抄。
-- 正确做法是**下载上游快照覆盖文件**。
+| | 值 |
+| --- | --- |
+| 分支 / HEAD | `main`，**恒等于纯上游基线**（建于 `b006891a`） |
+| 4 个覆盖产物 | 只停在工作区，**永远是未暂存 modified** —— 这是特性，一眼看到我们动了哪 4 个文件 |
+| `core.autocrlf` | **`true`** —— 本体文件是 CRLF、上游是 LF，必须归一化后比较，否则 19 个文件全部误报 modified |
+| remote `upstream` | 已配 `aus666666/red-book-skills.git`（**本机当前不可达**，见下） |
+
+### ⚠️ 本机 `github.com` 的 git 端点不可达
+
+2026-09-12 实测三通道：
+
+| 端点 | 走代理 `127.0.0.1:11455` | 直连 |
+| --- | --- | --- |
+| `api.github.com` | ✅ | ✅ |
+| `codeload.github.com`（tarball） | ✅ | ✅ |
+| **`github.com`（git 端点）** | ❌ 502 | ❌ 超时 |
+
+所以 **`git fetch` / `git clone` / `git ls-remote` 全都用不了**。
+附带发现：`update-checker` 里那个 `git ls-remote` 兜底探测在本机**一直是失效的**，
+它实际只靠 GitHub API 在跑。
+
+**结论：上游快照只能走 `codeload` tarball**，同步的实质动作没有变化：
 
 ```bash
 # 下载并解压上游
@@ -73,8 +92,28 @@ $PY $P/core-overrides/helpers/apply_overrides.py apply
 > 注意：覆盖只是"上游文件盖过来"，**不会删**本体里上游没有的文件
 > （我们的 `helpers/`、`config/accounts.json` 等本来就该保留）。
 
-**长期建议**：把本体 git 化，同步就变成 `git fetch upstream && git diff`，
-能精确看到上游每次改了哪一行。见文末「可选：让本体成为 git 仓库」。
+### git 化在当前网络下提供了什么
+
+- ✅ `git status` —— 一眼看到我们改了哪 4 个文件
+- ✅ `git diff` —— 我们相对上游的改动
+- ✅ `git log` / `git checkout <sha> -- .` —— 版本记录与回退
+- ❌ `git fetch upstream` + `git diff HEAD upstream/main` —— **行级看上游改动，目前用不了**
+
+因此**上游差异对比仍以 `diff-local` 为准**。若将来 `github.com` 可达，
+升级为「fetch → diff → checkout → 推进基线 → apply」（见文末）。
+
+### ⚠️ git 化新增的误操作面
+
+本体有 `.git` 之后，这些命令会**一键抹掉覆盖产物**：
+
+```bash
+git checkout .          # 或 git reset --hard / git stash / git clean
+```
+
+兜底：`apply_overrides.py status` 会立刻报 `PRISTINE`，跑一次 `apply` 即恢复。
+
+**约定：本体仓库只保留"纯上游"的提交，永不 commit 覆盖产物** ——
+否则 HEAD 变成"上游+覆盖"混合体，`git diff` 就分不清谁改了哪行，git 化白做。
 
 ## 覆盖层冲突处理（core-overrides）
 
@@ -165,7 +204,8 @@ $PY $P/core-overrides/helpers/apply_overrides.py apply
 
 ## 跨机器同步 patch
 
-patch 目录自包含，可整包跨机器同步：
+patch 目录自包含，可整包跨机器同步。**patches 已于 2026-09-12 git 化**（本地仓库、无 remote），
+因此迁移也可用 `git bundle create patches.bundle --all` 或直接 clone，不再只能打 tar。
 
 ```bash
 # 源机器
@@ -186,7 +226,9 @@ python <patch>/core-overrides/helpers/apply_overrides.py apply   # 新机器上�
 
 | 现象 | 原因 | 处理 |
 | --- | --- | --- |
-| `git pull` 报 `not a git repository` | 本体不是 git 仓库 | 用「本体不是 git 仓库」一节的覆盖方式 |
+| `git fetch upstream` 报 502 / 连接超时 | 本机 `github.com` git 端点不可达 | 改用 `codeload` tarball 覆盖（见「本体已 git 化」一节） |
+| `git status` 显示十几个文件全 modified | `core.autocrlf` 被设成了 `false` | `git config core.autocrlf true` 后重看 |
+| 覆盖产物"不见了"（`git status` 变干净） | 误跑 `git checkout .` / `reset --hard` / `stash` | `apply_overrides.py status` 会报 `PRISTINE`，跑 `apply` 恢复 |
 | `apply_overrides.py status` 报 `DRIFTED` | 有人直接改了本体 | 把该改动搬进 `overrides/`，再 `apply` |
 | `apply_overrides.py status` 报 `PRISTINE` | 刚覆盖过本体还没 apply | 跑 `apply` |
 | `diff-local` 报覆盖层冲突 | 上游也改了被覆盖文件 | 按「覆盖层冲突处理」合并，**别直接覆盖** |
@@ -195,32 +237,65 @@ python <patch>/core-overrides/helpers/apply_overrides.py apply   # 新机器上�
 | 间隔守卫报"未到间隔"但实际已过 | 时钟漂移 / 状态被外部改 | 查 `state/publish_log.json`；reset 后重新 record |
 | update_check 报 `rate_limited` | GitHub API 限流 | 等冷却；本 patch 用 cooldown 抑制重复提醒 |
 
-## 可选：让本体成为 git 仓库
+## 本体 git 化的现状与维护
 
-当前本体是拷贝安装、无 `.git`，所以只能靠 `diff-local` 做内容对比。
-如果希望同步更精确，可以把本体 git 化：
+本体已于 **2026-09-12 git 化**。建库方式（记录备查）：
 
 ```bash
 cd <本体>
-git init
+git init -b main
+git config core.autocrlf true      # ⚠️ 不能设 false，否则 CRLF/LF 会让 19 个文件全报 modified
 git remote add upstream https://github.com/aus666666/red-book-skills.git
-git add -A && git commit -m "baseline: 本地当前状态（含覆盖层应用产物）"
 
-# 以后同步：
-git fetch upstream
-git diff HEAD upstream/main --stat      # 精确看上游改了哪些行
-git checkout upstream/main -- .         # 只把上游版本取到工作区
-python <patch>/core-overrides/helpers/apply_overrides.py apply
+# 本机 github.com git 端点不可达，故用 codeload 取快照：
+# 在临时目录做成"上游快照仓库"，再本地 fetch（不走网络）
+<下载 tarball 并解压到 /tmp/up>
+git -C /tmp/up init -b main && git -C /tmp/up add -A && git -C /tmp/up commit -m "upstream snapshot"
+
+# 锚定纯上游：read-tree 只填索引，工作区一个字节都不动
+git fetch /tmp/up HEAD
+git read-tree FETCH_HEAD
+git commit -m "baseline: upstream main @ <sha>"
 ```
 
-优点：能精确到行地看上游改动，冲突时可用三方合并。
-注意：`.gitignore` 已排除 `.venv/`、`tmp/`、`config/accounts.json`（含凭据），
-**不要把账号信息提交进去**。
+结果：`HEAD` = 纯上游；4 个覆盖产物 = 未暂存 modified；`git status` 恒不干净（**预期如此**）。
 
-> 是否启用由用户决定；不启用时 `diff-local` 已能覆盖全部需求。
+### 建基线前务必校验快照
+
+下载的 tarball 必须与 `core-overrides/baseline.json` 记录的 `upstream_sha256`
+（行尾归一化后）**逐项比对，四项全 MATCH 才能用来建基线** ——
+否则基线本身可能是被污染的。
+
+### 若将来 `github.com` 可达，同步流程升级为
+
+```bash
+git fetch upstream
+git diff HEAD upstream/main --stat     # 精确看上游改了哪些行
+git checkout upstream/main -- .        # 工作区变成新上游（覆盖产物被冲掉，正常）
+git add -A && git commit -m "baseline: upstream <新 sha>"   # 推进基线
+$PY $P/core-overrides/helpers/apply_overrides.py apply      # 重新叠回我们的覆盖
+```
+
+⚠️ `checkout` 与 `commit` 的**顺序不能颠倒**：先 checkout 再 commit，基线才是纯上游；
+若先 apply 再 commit，HEAD 又变成混合体了。
+
+### 凭据
+
+上游的 `.gitignore` 已排除 `.venv/`、`tmp/`、`config/accounts.json`（含凭据）。
+建库后核对一次 `git ls-files` —— 应当**只**出现上游的
+`config/accounts.json.example`，真实凭据绝不能进库。
 
 ## 修改记录
 
+- v1.8.0 (2026-09-12) **本体 git 化**（用户下达"本体请同步git化"）：基线提交 `8f3e151`，
+  HEAD 恒等于纯上游 `b006891a`，4 个覆盖产物只停在工作区（未暂存 modified）；
+  `core.autocrlf=true`（本体 CRLF / 上游 LF，设 false 会让 19 个文件全误报）。
+  **实测本机 `github.com` git 端点不可达**（走代理 502 / 直连超时）→ `git fetch` / `ls-remote`
+  均不可用，快照只能走 `codeload`，故上游差异对比仍以 `diff-local` 为准。
+  重写「本体不是 git 仓库」→「本体已 git 化（仍不能靠 git pull 同步）」；
+  「可选：让本体成为 git 仓库」→「现状与维护」（含建基线前的 sha256 校验要求、
+  网络恢复后的升级流程、checkout/commit 顺序警示、凭据核对）；
+  故障排查表补 3 条（fetch 502 / autocrlf 误设 / 覆盖产物被抹）
 - v1.7.0 (2026-09-12) 适配 `core-overrides` 架构：**删除 22 条人工迁移清单**（由覆盖层接管）；
   修正失效的 `git pull` 指令（本体无 `.git`）；新增「标准同步流程」「覆盖层冲突处理」
   「可选：让本体成为 git 仓库」；补 `check` 间隔导致实际约两周才查一次的说明

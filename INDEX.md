@@ -57,7 +57,7 @@ done
 └─ red-book-skills/          ← 来自 aus666666/red-book-skills
    ├── scripts/              ← 核心 CDP 自动化（3 个文件被 core-overrides 覆盖）
    ├── SKILL.md              ← 上游骨架 + patch 规则合并（同样被覆盖）
-   └── ...                   ← ⚠️ 拷贝安装，无 .git，不能用 git pull 同步
+   └── ...                   ← 已 git 化：HEAD 恒为纯上游，覆盖产物恒为未暂存 modified
 
 patch 集（本目录）
 └─ red-book-skills-patches/  ← 独立维护，物理隔离
@@ -77,11 +77,17 @@ patch 集（本目录）
 **同步上游 = 覆盖本体 → `apply_overrides.py apply`**。本体里被我们改过的文件只是
 "应用产物"，权威副本在 `core-overrides/overrides/`，所以覆盖不会丢东西。
 
+本体已于 2026-09-12 git 化（HEAD 恒等于纯上游基线，4 个覆盖产物只停在工作区）。
+⚠️ **`git checkout .` / `git reset --hard` / `git stash` 会一键抹掉覆盖产物** ——
+兜底：`apply_overrides.py status` 会报 `PRISTINE`，再 `apply` 即恢复。
+本机 `github.com` 的 git 端点不可达（走代理 502 / 直连超时），`git fetch upstream` 用不了，
+上游差异对比仍以 `diff-local` 为准。
+
 ## 升级主 skill 后如何处理 patch
 
 1. 跑 `update-checker diff-local` —— 看上游改了什么、**覆盖层有没有冲突**
 2. **有覆盖层冲突** → 先把上游改动人工合并进 `core-overrides/overrides/`（别直接覆盖本体）
-3. 覆盖本体（下载上游快照覆盖，**不是 `git pull`**）
+3. 覆盖本体（下载上游快照覆盖；本机 `github.com` git 端点不可达，`git fetch` 用不了）
 4. `apply_overrides.py status`（预期 PRISTINE）→ `apply` → `verify`
 5. 跑自测 + 端到端；更新 `baseline.json` 与 `acknowledge --sha`
 
@@ -95,6 +101,14 @@ patch 集（本目录）
 
 ## 修改记录
 
+- v1.7.0 (2026-09-12) **patches 与本体双双 git 化**。`red-book-skills-patches` 建库
+  （首次提交 `f181307`，49 文件；排除 `__pycache__/`、`core-overrides/state/backup/`、`*.bak`）；
+  本体建库（基线提交 `8f3e151`，**HEAD 恒等于纯上游 `b006891a`**，4 个覆盖产物恒为未暂存 modified；
+  `core.autocrlf=true` —— 本体 CRLF、上游 LF，归一化后比较才不至于全量误报）。
+  **实测本机 `github.com` 的 git 端点不可达**（走代理 502 / 直连超时），
+  `git fetch` / `ls-remote` 均不可用 → 上游快照只能走 `codeload`；
+  因此上游差异对比仍以 `diff-local` 为准，git 提供的是版本记录与"我方改动可见"。
+  `UPGRADING.md` 1.7.0→**1.8.0** 同步修正「本体不是 git 仓库」等失效论断
 - v1.6.9 (2026-09-12) **确立「本体与补丁分离」架构**（用户原则：我们自己的更新放 patch，
   原始本体定期和 GitHub 同步）。新增 `core-overrides`（priority 2）：把此前**直接改在本体里的
   4 个文件**（约 470 行我们的改动：`SKILL.md` / `cdp_publish.py` / `chrome_launcher.py` /
