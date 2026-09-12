@@ -71,7 +71,8 @@ patch 集（本目录）
    ├── publish-preflight-guard/
    ├── publish-loop-guard/
    ├── writing-facts-only/
-   └── cover-image-rules/
+   ├── cover-image-rules/
+   └── tools/                 ← 工程工具：check_patch_versions.py、backup_snapshots.py
 ```
 
 **同步上游 = 覆盖本体 → `apply_overrides.py apply`**。本体里被我们改过的文件只是
@@ -99,8 +100,37 @@ patch 集（本目录）
 - 改 patch 内文件不会触发主 skill 重载
 - 新增 patch 必须在 INDEX.md 同步登记
 
+## 版本备份（防丢失）
+
+`tools/backup_snapshots.py` 把**本体与补丁仓的工作区**打包成快照，落到
+`~/Documents/red-book-skills-backup/`：
+
+```bash
+PY=<托管 python>
+$PY <patch>/tools/backup_snapshots.py                     # 备份（内容无变化则跳过，不留新份）
+$PY <patch>/tools/backup_snapshots.py --list              # 列出现有快照 + 告警状态
+$PY <patch>/tools/backup_snapshots.py --restore <快照> --target <目录>   # 恢复
+```
+
+- **为什么不能只靠 git bundle**：git 只管"已跟踪且已提交"的内容。而本体里的
+  `helpers/README.md`、`scripts/xhs_publish_fail.png`（未跟踪文件）和 4 个覆盖产物
+  （未提交的 modified）恰恰是最容易丢的部分 —— 所以打的是**工作区**快照，`.git` 一并打进包，
+  解压即得到"带完整 git 历史的完整工作区"。
+- 内容指纹去重：与上一份快照相同则不留新份；默认保留最近 30 份（`--keep` 可调），单份约 0.8 MB
+- 排除可重建项：本体 `.venv/ tmp/ __pycache__/ .pytest_cache/`、补丁仓 `core-overrides/state/backup/`
+- `config/accounts.json`（凭据）**默认不纳入备份**；要纳入就改脚本顶部 `INCLUDE_CREDENTIALS`
+- **失败留两处告警**：备份目录 `FAILED.txt` + 桌面 `!!备份失败-red-book-skills.txt`。
+  备份成功（或检测到无变化）时两者**自动删除** —— 所以它们存在即代表有待处理的失败
+- 已挂**每日 10:00** 自动备份任务
+
 ## 修改记录
 
+- v1.8.0 (2026-09-12) **新增定期版本备份**：`tools/backup_snapshots.py` —— 本体 + 补丁仓的
+  工作区快照（含 `.git`、未跟踪文件、未提交的覆盖产物）落到 `~/Documents/red-book-skills-backup/`；
+  内容指纹去重、默认保留 30 份、单份约 0.8 MB；失败时双告警（备份目录 `FAILED.txt` +
+  桌面 `!!备份失败-red-book-skills.txt`，成功自动清除）；已挂每日 10:00 自动化任务。
+  来源：用户要求「定期在 document 目录创建备份，任务失败要通知，避免版本丢失」，
+  且实测 git bundle 覆盖不到未跟踪文件与未提交的覆盖产物
 - v1.7.0 (2026-09-12) **patches 与本体双双 git 化**。`red-book-skills-patches` 建库
   （首次提交 `f181307`，49 文件；排除 `__pycache__/`、`core-overrides/state/backup/`、`*.bak`）；
   本体建库（基线提交 `8f3e151`，**HEAD 恒等于纯上游 `b006891a`**，4 个覆盖产物恒为未暂存 modified；

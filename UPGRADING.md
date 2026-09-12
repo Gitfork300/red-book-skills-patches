@@ -222,6 +222,46 @@ python <patch>/core-overrides/helpers/apply_overrides.py apply   # 新机器上�
   可以一起带；建议在新机器上 reset 发布日志避免历史污染
 - **新机器上一定要 `apply`**，否则本体没有我们的改动，发布可靠性修复不生效
 
+## 版本备份（防丢失）
+
+两个仓库都是"手工维护的现场"—— 误删、误改、覆盖半途失败都会造成版本丢失。
+`tools/backup_snapshots.py` 定期把**工作区**打成快照：
+
+```bash
+PY=<托管 python>
+$PY $P/tools/backup_snapshots.py                                # 备份（无变化则跳过）
+$PY $P/tools/backup_snapshots.py --list                         # 看快照 + 告警状态
+$PY $P/tools/backup_snapshots.py --restore <快照> --target <目录>  # 恢复到指定目录
+```
+
+产物在 `~/Documents/red-book-skills-backup/snapshots/<时间戳>_<指纹>/`，含
+`body.tar.gz`（本体）+ `patches.tar.gz`（补丁仓）+ `META.json`（两仓 git HEAD、指纹、体积）。
+
+**为什么不用 git bundle 就够了**：git 只管已跟踪且已提交的内容。本体里
+`helpers/README.md`、`scripts/xhs_publish_fail.png` 是**未跟踪**的，4 个覆盖产物是**未提交**的
+—— 这四类恰恰是最容易丢的。快照把 `.git` 一并打进包，解压即得"带完整历史的完整工作区"。
+
+- 内容指纹去重（与上一份相同不留新份）；默认保留最近 30 份
+- 排除可重建项：`.venv/ tmp/ __pycache__/ .pytest_cache/`、`core-overrides/state/backup/`
+- `config/accounts.json`（凭据）默认不纳入备份
+- 单份约 0.8 MB，已挂**每日 10:00** 自动化任务
+
+### 备份失败怎么被发现
+
+失败时会留下**两处**告警，存在即代表"最近一次备份没成功"：
+
+| 位置 | 文件 |
+| --- | --- |
+| `~/Documents/red-book-skills-backup/` | `FAILED.txt`（阶段 + 完整 traceback） |
+| 桌面 | `!!备份失败-red-book-skills.txt`（摘要 + 处理步骤） |
+
+**备份成功或检测到内容无变化时，两者都会被自动删除** —— 所以告警不会"粘住"。
+恢复命令：
+
+```bash
+$PY $P/tools/backup_snapshots.py --force        # 修好原因后重跑
+```
+
 ## 故障排查
 
 | 现象 | 原因 | 处理 |
@@ -236,6 +276,9 @@ python <patch>/core-overrides/helpers/apply_overrides.py apply   # 新机器上�
 | `verify-note` 找不到精确标题 | 主 skill 改了 `SELECTORS` | 查覆盖层 `overrides/scripts/cdp_publish.py` 与上游差异 |
 | 间隔守卫报"未到间隔"但实际已过 | 时钟漂移 / 状态被外部改 | 查 `state/publish_log.json`；reset 后重新 record |
 | update_check 报 `rate_limited` | GitHub API 限流 | 等冷却；本 patch 用 cooldown 抑制重复提醒 |
+| 桌面出现 `!!备份失败-red-book-skills.txt` | 定期备份失败，期间的改动无备份保护 | 看其中摘要或同目录 `FAILED.txt` 的 traceback，修好后 `backup_snapshots.py --force`；成功后告警自动消失 |
+| 想确认"到底有没有备份上" | —— | `backup_snapshots.py --list`：看快照列表 + 两处告警状态 |
+| 备份脚本报"未采集到任何文件" | 本体/补丁仓路径变了 | 改脚本顶部 `BODY` / `PATCH` 常量 |
 
 ## 本体 git 化的现状与维护
 
@@ -287,6 +330,11 @@ $PY $P/core-overrides/helpers/apply_overrides.py apply      # 重新叠回我们
 
 ## 修改记录
 
+- v1.9.0 (2026-09-12) **新增「版本备份（防丢失）」**：`tools/backup_snapshots.py` 对本体与
+  补丁仓的**工作区**做快照（含 `.git`、未跟踪文件、未提交的覆盖产物），落到
+  `~/Documents/red-book-skills-backup/`；指纹去重、保留 30 份、单份约 0.8 MB，
+  已挂每日 10:00 自动化。失败双告警（备份目录 `FAILED.txt` + 桌面
+  `!!备份失败-red-book-skills.txt`，成功自动清除）；故障排查表补 3 条
 - v1.8.0 (2026-09-12) **本体 git 化**（用户下达"本体请同步git化"）：基线提交 `8f3e151`，
   HEAD 恒等于纯上游 `b006891a`，4 个覆盖产物只停在工作区（未暂存 modified）；
   `core.autocrlf=true`（本体 CRLF / 上游 LF，设 false 会让 19 个文件全误报）。
