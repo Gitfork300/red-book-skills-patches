@@ -1,6 +1,7 @@
 {
   "name": "publish-interval-guard",
-  "version": "1.2.0",
+  "system": "publish",
+  "version": "1.4.0",
   "patch_for": "red-book-skills",
   "applies_to_main_version": ">=0.1.0",
   "priority": 20,
@@ -14,6 +15,12 @@
       "resolution": "export XHS_INTERVAL_GUARD=<patch>/helpers/publish_interval.py"
     }
   ],
-  "files": ["SKILL.md", "helpers/publish_interval.py"],
-  "state_files": ["state/publish_log.json"]
+  "files": [
+    "SKILL.md",
+    "helpers/publish_interval.py",
+    "refs/01-detail.md"
+  ],
+  "state_files": [
+    "state/publish_log.json"
+  ]
 }

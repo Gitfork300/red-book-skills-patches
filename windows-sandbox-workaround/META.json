@@ -1,6 +1,7 @@
 {
   "name": "windows-sandbox-workaround",
-  "version": "1.5.0",
+  "system": "shared",
+  "version": "1.6.9",
   "patch_for": "red-book-skills",
   "applies_to_main_version": ">=0.1.0",
   "priority": 10,
@@ -14,7 +15,13 @@
       "description": "通过环境变量指向 publish-interval-guard 的 helper，自动在 publish 前 wait、publish 后 record"
     }
   ],
-  "conflict_points": [],
+  "conflict_points": [
+    {
+      "with": "xhs-risk-guard",
+      "description": "登录域与「假风控」规则的完整表由 xhs-risk-guard 汇总（B 表/D 表）；本 patch 保留登录实现细节与本机排查细节，不重复定义规则。",
+      "resolution": "规则以 xhs-risk-guard 为单一权威，本 patch 的「登录态与风控（规则索引）」一节只做入口指引"
+    }
+  ],
   "files": [
     "SKILL.md",
     "helpers/xhs_login_wait.py",

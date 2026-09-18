@@ -45,6 +45,7 @@ Exit codes:
 """
 
 import argparse
+import atexit
 import json
 import os
 import random
@@ -483,50 +484,133 @@ def _find_interval_guard() -> str | None:
     return None
 
 
-def record_publish_interval(note_id: str, title: str) -> None:
+def _run_interval_guard(args_list, timeout, label):
+    """统一调用间隔守卫子命令。返回 (rc, stdout, stderr)；异常时 rc=None。"""
+    helper = _find_interval_guard()
+    if not helper:
+        return None, "", "未找到 publish-interval-guard"
+    try:
+        r = subprocess.run(
+            [sys.executable, helper] + list(args_list),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
+        return r.returncode, r.stdout or "", r.stderr or ""
+    except Exception as e:  # noqa: BLE001
+        print(f"[pipeline] {label} 异常: {e}", file=sys.stderr)
+        return None, "", str(e)
+
+
+# 本次进程占用的发布资格。published=True 表示笔记确实发出去了，
+# 此时绝不能释放占位（释放会让下一篇的间隔判定回退到更早的一条）。
+_RESERVE = {"id": None, "published": False}
+
+
+def _release_reserve_on_exit():
+    """进程退出时释放未被消费的占位。
+
+    用 atexit 而不是把 main() 整段包进 try/finally：main() 里有十几处 sys.exit()，
+    包起来需要重排两百多行缩进，风险远大于收益。atexit 在正常返回和 sys.exit()
+    两种路径下都会执行；被强杀（os._exit / kill）时不会执行，但守卫自身的
+    pending TTL（默认 30 分钟）会兜底回收。
+    """
+    rid = _RESERVE.get("id")
+    if rid and not _RESERVE.get("published"):
+        rc, out, err = _run_interval_guard(
+            ["release", "--reserve-id", rid], 60, "释放占位"
+        )
+        detail = (out or err or "").strip().splitlines()
+        print(
+            "[pipeline] 本次未完成发布，已释放占位 %s%s"
+            % (rid, ("（%s）" % detail[-1]) if detail else ""),
+            file=sys.stderr,
+        )
+
+
+def reserve_publish_slot(title, allow_same_title=False, max_block=0):
+    """发布前原子抢占发布资格（跨进程互斥的核心）。
+
+    为什么必须在**发布之前**占位：原来的流程是「发布前 check（只读）→ 发布 → 发布后 record」，
+    检查和记账之间隔着整条发布流程（数分钟）。两个批次同时跑时，
+    双方都会看到「间隔已满足」，于是同一篇被发两遍。
+    2026-09-17 实测到 3 组同标题 2~6 秒间隔的重复笔记。
+
+    返回 (ok, reserve_id, reason)。reason ∈ {"", "dup_title", "interval", "lock", "guard_missing"}。
+    """
+    if os.environ.get("XHS_INTERVAL_RESERVE", "1") == "0":
+        print("[pipeline] XHS_INTERVAL_RESERVE=0，跳过发布资格抢占")
+        return True, None, ""
+
+    cmd = ["reserve", "--json"]
+    if title:
+        cmd += ["--title", title]
+    if allow_same_title:
+        cmd += ["--allow-same-title"]
+    if max_block:
+        cmd += ["--max-block", str(max_block)]
+
+    rc, out, err = _run_interval_guard(cmd, timeout=max_block + 120, label="抢占发布资格")
+
+    payload = {}
+    for line in reversed((out or "").strip().splitlines()):
+        line = line.strip()
+        if line.startswith("{"):
+            try:
+                payload = json.loads(line)
+                break
+            except ValueError:
+                continue
+
+    if rc == 0 and payload.get("reserved"):
+        rid = payload.get("reserve_id")
+        _RESERVE["id"] = rid
+        _RESERVE["published"] = False
+        atexit.register(_release_reserve_on_exit)
+        print(f"[pipeline] 已抢占发布资格 reserve_id={rid}")
+        return True, rid, ""
+
+    reason = payload.get("reason") or {None: "guard_missing", 1: "interval",
+                                       3: "dup_title", 4: "lock"}.get(rc, "unknown")
+    detail = payload.get("detail") or (err or out or "").strip()[:200] or "未知原因"
+    return False, None, f"{reason}: {detail}"
+
+
+def release_publish_slot(reserve_id):
+    """显式释放占位（发布明确失败时调用；进程退出时由 atexit 兜底）。"""
+    if not reserve_id:
+        return
+    _RESERVE["id"] = reserve_id
+    _RESERVE["published"] = False
+    _release_reserve_on_exit()
+    _RESERVE["id"] = None
+
+
+def record_publish_interval(note_id: str, title: str, reserve_id: str | None = None) -> None:
     """发布成功后把 note_id 写入间隔守卫日志。
 
     发布已经成功，所以这里任何失败都只告警、不影响退出码。
     没有它，批量发布时守卫会因"查不到上次记录"而误判为可立即发布。
     """
+    # 不管记账成不成功，笔记都已经发出去了 —— 先摘掉待释放标记，
+    # 否则 atexit 会把占位 release 掉，下一篇的间隔判定会回退到更早的记录。
+    _RESERVE["published"] = True
+
     if not note_id:
         print("[pipeline] 未取到 note_id，跳过间隔记录", file=sys.stderr)
         return
 
-    helper = _find_interval_guard()
-    if not helper:
-        print(
-            "[pipeline] 未找到 publish-interval-guard，跳过间隔记录"
-            "（可用 XHS_PUBLISH_INTERVAL_HELPER 指定路径）",
-            file=sys.stderr,
-        )
-        return
+    cmd = ["record", "--note-id", note_id, "--title", title]
+    if reserve_id:
+        cmd += ["--reserve-id", reserve_id]
+    rc, out, err = _run_interval_guard(cmd, 60, "间隔记录")
 
-    try:
-        r = subprocess.run(
-            [
-                sys.executable,
-                helper,
-                "record",
-                "--note-id",
-                note_id,
-                "--title",
-                title,
-            ],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=60,
-        )
-    except Exception as e:  # noqa: BLE001 - 记录失败不该影响发布结果
-        print(f"[pipeline] 间隔记录异常（不影响本次发布）: {e}", file=sys.stderr)
-        return
-
-    if r.returncode == 0:
+    if rc == 0:
         print(f"[pipeline] 间隔记录已写入 note_id={note_id}")
     else:
-        detail = (r.stderr or r.stdout or "").strip()[:200]
+        detail = (err or out or "").strip()[:200]
         print(
             f"[pipeline] 间隔记录失败（不影响本次发布）: {detail}",
             file=sys.stderr,
@@ -674,9 +758,30 @@ def main():
         action="store_true",
         default=False,
         help=(
-            "Do not write this publish into the publish-interval-guard log. "
+            "Do not write this publish into the publish-interval-guard log, "
+            "and skip the pre-publish slot reservation. "
             "By default a successful publish is recorded automatically so that "
             "consecutive batch publishes keep the >=10min spacing."
+        ),
+    )
+    parser.add_argument(
+        "--allow-same-title",
+        action="store_true",
+        default=False,
+        help=(
+            "Allow reserving a publish slot even if the same title already "
+            "exists in the interval-guard log. Only for the case where the old "
+            "note has actually been deleted from the platform (the log keeps "
+            "the record even after the note is gone)."
+        ),
+    )
+    parser.add_argument(
+        "--reserve-max-block",
+        type=int,
+        default=0,
+        help=(
+            "Seconds the pre-publish reservation may block waiting for the "
+            "interval to elapse (default 0 = fail fast instead of waiting)."
         ),
     )
 
@@ -745,6 +850,38 @@ def main():
             "[pipeline] Detected topic tags from last line: "
             f"{' '.join(topic_tags)}"
         )
+
+    # --- Step 0: 抢占发布资格（跨进程互斥，必须在起浏览器之前）---
+    # 放在这里而不是发布后，是为了堵住「检查」与「记账」之间的 TOCTOU 窗口：
+    # 检查和记账之间隔着整条发布流程（数分钟），并发批次会双双通过检查 → 同一篇发两遍。
+    if args.no_record:
+        print("[pipeline] --no-record 已指定，跳过发布资格抢占")
+    else:
+        ok, _reserve_id, why = reserve_publish_slot(
+            title,
+            allow_same_title=args.allow_same_title,
+            max_block=max(0, args.reserve_max_block),
+        )
+        if not ok:
+            reason = why.split(":", 1)[0]
+            print(f"[pipeline] 未能取得发布资格 → 终止本次发布（{why}）", file=sys.stderr)
+            if reason == "dup_title":
+                print(
+                    "[pipeline] 同标题已发布过。若旧笔记确已从平台删除，"
+                    "可加 --allow-same-title 重发。",
+                    file=sys.stderr,
+                )
+                sys.exit(3)
+            if reason == "lock":
+                sys.exit(4)
+            if reason == "guard_missing":
+                print(
+                    "[pipeline] 未找到 publish-interval-guard，已按 fail-closed 终止；"
+                    "如确认要跳过，可设 XHS_INTERVAL_RESERVE=0。",
+                    file=sys.stderr,
+                )
+                sys.exit(4)
+            sys.exit(1)
 
     # --- Step 1: Ensure Chrome is running ---
     mode_label = "headless" if headless else "headed"
@@ -906,7 +1043,7 @@ def main():
                 if m:
                     _note_id = m.group(1)
             if not args.no_record:
-                record_publish_interval(_note_id, title)
+                record_publish_interval(_note_id, title, reserve_id=_reserve_id)
             else:
                 print("[pipeline] --no-record 已指定，跳过间隔记录")
         except CDPError as e:

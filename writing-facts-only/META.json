@@ -1,6 +1,7 @@
 {
   "name": "writing-facts-only",
-  "version": "1.1.0",
+  "system": "publish",
+  "version": "1.6.1",
   "patch_for": "red-book-skills",
   "applies_to_main_version": ">=0.1.0",
   "priority": 30,

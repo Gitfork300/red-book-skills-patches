@@ -1,12 +1,13 @@
 {
   "name": "timeliness-window",
-  "version": "1.3.0",
+  "system": "publish",
+  "version": "1.8.0",
   "patch_for": "red-book-skills",
   "applies_to_main_version": ">=0.1.0",
   "priority": 22,
   "author": "Eric",
   "created": "2026-09-11",
-  "updated": "2026-09-11",
+  "updated": "2026-09-18",
   "dependencies": [
     "publish-interval-guard"
   ],

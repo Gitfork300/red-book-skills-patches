@@ -16,25 +16,44 @@
 
 ## Patch 列表（按 priority 升序加载）
 
+> **体系分组（2026-09-15 用户裁定：评论与发布是两套体系，独立维护，避免干扰）**
+> 边界权威见 **[`SYSTEMS.md`](./SYSTEMS.md)**；每个 patch 的 `SKILL.md` frontmatter 带 `system:` 字段。
+> 规则冲突一律按 `SYSTEMS.md` 第三节「交叉点清单」判定。
+>
+> | 体系 | 代号 | 成员 |
+> | --- | --- | --- |
+> | **发布** | `publish` | `writing-facts-only`、`safe-wording-guard`、`cover-image-rules`、`timeliness-window`、`organizer-qualification-guard`、`publish-preflight-guard`、`publish-interval-guard`、`publish-loop-guard` |
+> | **评论** | `comment` | `comment-reply-guard` |
+> | **共用基座** | `shared` | `core-overrides`、`update-checker`、`windows-sandbox-workaround`、`xhs-risk-guard`、`tools` |
+>
+> **改哪个体系只动哪套 skill**；确需跨体系生效的规则，必须先在 `SYSTEMS.md` 交叉点清单登记，
+> 再在两边的 SKILL.md 互相指向。
+
 | # | Patch | 优先级 | 版本 | 用途 | 配套脚本 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `core-overrides` | 2 | 1.0.0 | **本体文件覆盖层**：我们自己对源码的改动（发布按钮重试、沙箱脱离、间隔记录、SKILL.md 规则合并）。同步上游后必须 apply | `helpers/apply_overrides.py` |
+| 1 | `core-overrides` | 2 | 1.0.0 | **本体文件覆盖层**：我们自己对源码的改动（发布按钮重试、沙箱脱离、间隔记录、SKILL.md 规则合并）。同步上游后必须 apply。**本体 SKILL.md 已拆分为主入口 + `references/`（5 个），新增文件会随 apply 自动同步** | `helpers/apply_overrides.py` |
 | 2 | `update-checker` | 5 | 1.1.0 | 检测原仓库更新 + **内容级对比本地与上游（`diff-local`，忽略行尾假阳性，含覆盖层冲突检测）** | `helpers/update_check.py` |
-| 3 | `windows-sandbox-workaround` | 10 | 1.5.0 | Windows 沙箱/受限会话适配 + 进程/探活/网络可达性排查坑位 | `helpers/xhs_login_wait.py`, `helpers/xhs_focus.ps1`, `helpers/net_probe.py` |
-| 4 | `safe-wording-guard` | 15 | 0.4.1 | 规避站外导流等敏感词，**正文一律不出现网址/裸域名**；含涉港澳台表述规范 | `helpers/check_wording.py` |
-| 5 | `publish-interval-guard` | 20 | 1.2.0 | 连续发布间隔 **8~12 分钟随机**（下限 8 分钟） | `helpers/publish_interval.py` |
-| 6 | `timeliness-window` | 22 | 1.3.0 | **会展活动只发江浙沪/珠三角；只发近 7 天在举行 / 需报名的活动；无直播且公众无法报名的不发；台风影响类每日 ≤1 篇** | `helpers/geo_check.py`, `helpers/check_window.py`, `helpers/quota_check.py` |
-| 7 | `publish-preflight-guard` | 25 | 1.8.0 | **发布前 15 项总检查 + 批量队列控制** | — |
-| 8 | `publish-loop-guard` | 28 | 1.3.0 | **「启动」触发词自动检索发布 + 每 30 分钟漏发复核（只看最近几日/第一页）+ 按事件查重 + 长批次硬停止时间** | `helpers/check_missing.py`, `helpers/watch_missing.py`, `helpers/dup_check.py`, `helpers/recent_published.py` |
-| 9 | `writing-facts-only` | 30 | 1.1.0 | 只陈述事实；标题要说内容；活动须写参与方式 | — |
-| 10 | `cover-image-rules` | 50 | 1.2.0 | 封面配图规范（真实感优先、禁二维码/人物/完整人形机器人） | — |
+| 3 | `windows-sandbox-workaround` | 10 | 1.6.9 | Windows 沙箱/受限会话适配 + 进程/探活/网络可达性排查坑位 + **登录态与风控规则索引** | `helpers/xhs_login_wait.py`, `helpers/xhs_focus.ps1`, `helpers/net_probe.py` |
+| 3.5 | `comment-reply-guard` | 11 | 1.15.0 | **评论体系**：评论 / 私信的读取与回复 —— 回复标记、报名网址、提醒登记、非提问不回、Tab/内存守护、读取节流、2 天笔记窗口、历史快照合并、私信已回判定与 DOM 适配 | — |
+| 4 | `xhs-risk-guard` | 12 | 1.3.0 | **小红书风控规则单一权威**（读取限流 / 登录态 / 接口签名 / 「假风控」四域总表）+ **可执行守卫**（预算·冷却·连续失败熔断） | `helpers/risk_state.py` |
+| 5 | `safe-wording-guard` | 15 | 0.7.0 | 规避站外导流等敏感词，**正文一律不出现网址/裸域名**；**标题 20 上限按「字宽」计**；**标题不写序号（①/（一）/系列N，P0）**；含涉港澳台表述规范 | `helpers/check_wording.py` |
+| 6 | `publish-interval-guard` | 20 | 1.4.0 | 连续发布间隔 **8~12 分钟随机**（下限 8 分钟）；**`record` 按 note_id 幂等**；**`state/publish_log.json` 是 100 条环形缓冲 —— 不得用条目数当「当日已发篇数」**；**verify-note 判据＝`found:true`（不是 grep "SUCCESS"），摘要只取 stdout**；**`reserve`/`release` 发布资格抢占（堵 TOCTOU 并发重复发布）** | `helpers/publish_interval.py` |
+| 7 | `timeliness-window` | 22 | 1.8.0 | **会展活动只发江浙沪/珠三角；只发近 7 天在举行 / 需报名的活动（专题系列 15 天）；无直播且公众无法报名的不发（邀请制可发）；恶劣天气类每日 ≤1 篇，红 / 黑色预警放宽至 3 篇；专题未闭幕不得停更（停止/切换＝闭幕日 T+2）** | `helpers/geo_check.py`, `helpers/check_window.py`, `helpers/quota_check.py` |
+| 7.5 | `organizer-qualification-guard` | 23 | 1.3.0 | **主办资质闸门**：活动/展会/论坛类须事业单位/行业龙头/行业协会牵头的中大型活动且正文有含金量；付费小班/价格/私企黑名单/无合规主办方 → 硬拒（第 16 项） | `helpers/check_organizer.py` |
+| 8 | `publish-preflight-guard` | 25 | 1.17.0 | **发布前 19 项总检查 + 批量队列控制**；第 9 项字数**必须与发布链同口径**（含空格计 —— 去空格自算会差 40 字） | `helpers/batch_preflight.py` |
+| 9 | `publish-loop-guard` | 28 | 1.8.1 | **「启动」触发词自动检索发布 + 每 30 分钟漏发复核（只看最近几日/第一页）+ 按事件查重（三道信号：事件标识／公共子串／**地点+日期**；类别化窗口：A 类当天／行业类 **7 天**／其他 15 天，优先级 A>行业>其他；`--series` 只放宽公共子串，不放宽第三道信号；**发布链重试前必须 verify 防重复发布**）+ 长批次硬停止时间 + 合规审计（全量清单 + 正文核验，含风控熔断）** | `helpers/check_missing.py`, `helpers/watch_missing.py`, `helpers/dup_check.py`, `helpers/recent_published.py`, `helpers/list_all_notes.py`, `helpers/read_note_body.py` |
+| 10 | `writing-facts-only` | 30 | 1.6.1 | 只陈述事实；标题要说内容；活动须写参与方式 | — |
+| 11 | `cover-image-rules` | 50 | 1.6.0 | 封面配图规范（真实感优先、禁二维码/人物/完整人形机器人）；**展会/活动类官方宣传图 ≥80% 硬闸门（台账 + `check_cover_source.py`）**；紧急事件（台风等）改用矢量示意图 | `helpers/check_cover_source.py` |
 
 加载顺序：低优先级先加载（被后者叠加）。
 
 ## 加载方式
 
-主 skill 顶部 `Loaded patches` 段会引用本 INDEX.md。
-agent 在执行任何 red-book-skills 任务前，应先扫本目录确认 patch 列表，按 priority 顺序应用。
+日常应加载根目录 [`SKILL.md`](./SKILL.md)，它是 `red-book-skills-patch` 的唯一门面。
+同级 `red-book-skills` 只作为上游执行本体，不得直接调用；首次加载 Patch 或上游变化
+后运行一次 `python tools/ensure_compatible.py`。同一会话后续任务复用门禁结果；需要
+强制复核时加 `--refresh`。门禁通过后，再按本 INDEX 的 priority 顺序应用规则。
+本目录的 `core-overrides` 负责把必须进入执行本体的兼容修复安全应用回上游目录。
 
 ## 快速检查
 
@@ -50,13 +69,36 @@ for d in ~/.workbuddy/skills/red-book-skills-patches/*/; do
 done
 ```
 
+公开发布前额外运行本地安全门禁（只检查本地工作树和 Git 索引，不联网）：
+
+```bash
+python tools/init_runtime.py
+python tools/check_public_release.py
+```
+
+`init_runtime.py` 只创建空的本地状态目录；首次运行 helper 时才生成状态 JSON。
+该门禁只阻断登录态、凭据和运行日志；业务标题、活动信息和规则文档可以保留。
+跨电脑安装和清理规则见 [`RUNTIME_SETUP.md`](./RUNTIME_SETUP.md)。
+
+## 文档分层（md 拆分与串联）
+
+> 规范权威见 **`DOC_LAYOUT.md`**（拆任何 md 之前先读）；校验跑 `tools/check_doc_layers.py`（拆完必跑）。
+> 三层模型：L0 主入口（铁律+索引，≤6000 字符/180 行）→ L1 详情（`refs/`，≤9000/260）→ L2 归档（日志/快照）。
+> 第 0 铁律（针对本体覆盖层）：**覆盖层不持有上游内容副本**——上游命令/流程/参数指向上游文档（如本体 `README.md`），否则主体更新后 `apply` 会把旧快照覆盖回去 = 回退上游改动。
+
+已全部拆分（2026-09-15 收尾）：
+- 本体 `SKILL.md` → `references/` 4 个
+- 工作区 `MEMORY.md` → `topics/` 9 个
+- 8 个 patch `SKILL.md` → 各自 `refs/`：comment-reply-guard / windows-sandbox-workaround / publish-loop-guard / timeliness-window / publish-preflight-guard / writing-facts-only / xhs-risk-guard / safe-wording-guard
+
 ## 与主 skill 的关系
 
 ```
 本体（上游代码 + 覆盖产物）
 └─ red-book-skills/          ← 来自 aus666666/red-book-skills
    ├── scripts/              ← 核心 CDP 自动化（3 个文件被 core-overrides 覆盖）
-   ├── SKILL.md              ← 上游骨架 + patch 规则合并（同样被覆盖）
+   ├── SKILL.md              ← 主入口（铁律 + 流程 + 索引），已瘦身至 ~5.8k 字符
+   ├── references/           ← 只放**我们自己的**展开文档（4 个，**不做上游内容副本**）
    └── ...                   ← 已 git 化：HEAD 恒为纯上游，覆盖产物恒为未暂存 modified
 
 patch 集（本目录）
@@ -65,6 +107,7 @@ patch 集（本目录）
    ├── core-overrides/        ← 本体文件覆盖层（权威副本在这里）
    ├── update-checker/
    ├── windows-sandbox-workaround/
+   ├── xhs-risk-guard/        ← 风控规则单一权威 + 可执行守卫
    ├── safe-wording-guard/
    ├── publish-interval-guard/
    ├── timeliness-window/
@@ -102,90 +145,15 @@ patch 集（本目录）
 
 ## 版本备份（防丢失）
 
-`tools/backup_snapshots.py` 把**本体与补丁仓的工作区**打包成快照，落到
-`~/Documents/red-book-skills-backup/`：
+`tools/backup_snapshots.py` 把**本体与补丁仓的工作区**打包成快照落到 `~/Documents/red-book-skills-backup/`。
+完整说明（为什么不能只靠 git、去重、排除项、失败告警）见 **[`UPGRADING.md`](./UPGRADING.md)「版本备份」**。已挂每日 10:00 自动备份任务。
 
-```bash
-PY=<托管 python>
-$PY <patch>/tools/backup_snapshots.py                     # 备份（内容无变化则跳过，不留新份）
-$PY <patch>/tools/backup_snapshots.py --list              # 列出现有快照 + 告警状态
-$PY <patch>/tools/backup_snapshots.py --restore <快照> --target <目录>   # 恢复
-```
+## 变更记录归档
 
-- **为什么不能只靠 git bundle**：git 只管"已跟踪且已提交"的内容。而本体里的
-  `helpers/README.md`、`scripts/xhs_publish_fail.png`（未跟踪文件）和 4 个覆盖产物
-  （未提交的 modified）恰恰是最容易丢的部分 —— 所以打的是**工作区**快照，`.git` 一并打进包，
-  解压即得到"带完整 git 历史的完整工作区"。
-- 内容指纹去重：与上一份快照相同则不留新份；默认保留最近 30 份（`--keep` 可调），单份约 0.8 MB
-- 排除可重建项：本体 `.venv/ tmp/ __pycache__/ .pytest_cache/`、补丁仓 `core-overrides/state/backup/`
-- `config/accounts.json`（凭据）**默认不纳入备份**；要纳入就改脚本顶部 `INCLUDE_CREDENTIALS`
-- **失败留两处告警**：备份目录 `FAILED.txt` + 桌面 `!!备份失败-red-book-skills.txt`。
-  备份成功（或检测到无变化）时两者**自动删除** —— 所以它们存在即代表有待处理的失败
-- 已挂**每日 10:00** 自动备份任务
+本文件只维护当前加载契约、patch 清单和操作入口，不重复保存事故复盘或逐版本 changelog。
 
-## 修改记录
-
-- v1.8.0 (2026-09-12) **新增定期版本备份**：`tools/backup_snapshots.py` —— 本体 + 补丁仓的
-  工作区快照（含 `.git`、未跟踪文件、未提交的覆盖产物）落到 `~/Documents/red-book-skills-backup/`；
-  内容指纹去重、默认保留 30 份、单份约 0.8 MB；失败时双告警（备份目录 `FAILED.txt` +
-  桌面 `!!备份失败-red-book-skills.txt`，成功自动清除）；已挂每日 10:00 自动化任务。
-  来源：用户要求「定期在 document 目录创建备份，任务失败要通知，避免版本丢失」，
-  且实测 git bundle 覆盖不到未跟踪文件与未提交的覆盖产物
-- v1.7.0 (2026-09-12) **patches 与本体双双 git 化**。`red-book-skills-patches` 建库
-  （首次提交 `f181307`，49 文件；排除 `__pycache__/`、`core-overrides/state/backup/`、`*.bak`）；
-  本体建库（基线提交 `8f3e151`，**HEAD 恒等于纯上游 `b006891a`**，4 个覆盖产物恒为未暂存 modified；
-  `core.autocrlf=true` —— 本体 CRLF、上游 LF，归一化后比较才不至于全量误报）。
-  **实测本机 `github.com` 的 git 端点不可达**（走代理 502 / 直连超时），
-  `git fetch` / `ls-remote` 均不可用 → 上游快照只能走 `codeload`；
-  因此上游差异对比仍以 `diff-local` 为准，git 提供的是版本记录与"我方改动可见"。
-  `UPGRADING.md` 1.7.0→**1.8.0** 同步修正「本体不是 git 仓库」等失效论断
-- v1.6.9 (2026-09-12) **确立「本体与补丁分离」架构**（用户原则：我们自己的更新放 patch，
-  原始本体定期和 GitHub 同步）。新增 `core-overrides`（priority 2）：把此前**直接改在本体里的
-  4 个文件**（约 470 行我们的改动：`SKILL.md` / `cdp_publish.py` / `chrome_launcher.py` /
-  `publish_pipeline.py`）抽成覆盖层 —— 权威副本在 patch，本体里的是应用产物，
-  配 `apply_overrides.py`（status/verify/apply/diff）+ `baseline.json` 基线指纹；
-  `update-checker` 的 `diff-local` 增加**覆盖层冲突检测**（上游也改过被覆盖文件即报警）；
-  `UPGRADING.md` 1.6.3→**1.7.0** 删除 22 条人工迁移清单、修正失效的 `git pull` 指令。
-  来源：查上游更新时发现本体被我们改脏，无法安全同步
-- v1.6.8 (2026-09-12) `update-checker` 1.0.0→**1.1.0**：新增 `diff-local` 子命令
-  （拉上游快照做**内容级对比**，内置行尾 CRLF/LF 与 BOM 归一化、跳过运行时目录，
-  输出「相同/内容不同/仅上游有/仅本地有」四分类），并补记**本地增强清单**
-  （`cdp_publish.py` 发布按钮三级重试、`chrome_launcher.py` 沙箱脱离 job、
-  `publish_pipeline.py` 间隔记录、`SKILL.md` patch 合并）——覆盖即回退。
-  来源：查上游更新时只比 commit sha 无法判断"这次改动会不会砸到本地定制"
-- v1.6.7 (2026-09-11) `safe-wording-guard` 0.3.0→**0.4.0**：**裸域名纳入 P0**（`github.com/xxx`、
-  `xxx.ai`、`www.xxx.com` 与完整 URL 同罪）；新增「来源标注的合规写法」（只写机构名+项目名+论文编号）。
-  来源：用户要求『不要直接出现网站』，而当时 P0 只拦 `https?://`，ai0911_04/08/10/18 四篇研究成果稿
-  的 `github.com/...`、`Z.ai` 全部漏检并发出。`publish-loop-guard` 1.2.0→**1.3.0**：明确复核范围
-  「只看最近 2~3 天 + 平台侧只读第一页」，新增 `helpers/recent_published.py`
-- v1.6.6 (2026-09-11) `publish-loop-guard` 1.1.0→**1.2.0**：新增「**排队前的选题查重（按事件，不按标题字面）**」
-  与 `helpers/dup_check.py`（「事件标识相同」+「公共子串 ≥5 字」双信号，日期串不算证据）。
-  来源：`浦江创新论坛` 同一场活动被发了两遍（00:48 / 06:12），精确匹配的查重没拦住；
-  `publish-preflight-guard` 第 1 项「选题查重」改为指向 `dup_check.py`
-- v1.6.5 (2026-09-11) `windows-sandbox-workaround` 1.4.0→**1.5.0**：新增「对外网络可达性：发布前必探（TLS 握手才算数）」
-  与 `helpers/net_probe.py`（TCP/`ping`/80 端口都会"假通"）；`publish-preflight-guard` 1.6.0→**1.7.0**
-  （总检查 14→**15 项**，新增「网络可达性」）。来源：ai0911 第 18 篇在 `上传图文 tab` 处失败，实为 443 TLS 被丢包
-- v1.6.4 (2026-09-11) `timeliness-window` 1.2.0→**1.3.0**：新增「地域范围」——**会展活动只发江浙沪或珠三角**
-  （其他地区一律不发；研究成果/政策类不受限），新增 `helpers/geo_check.py`（白名单+黑名单，退出码 0/1/2）；
-  `publish-preflight-guard` 1.5.0→**1.6.0**（总检查 13→**14 项**，地域范围列为第 2 项，闸门顺序「地域→时效→资格→配额」）
-- v1.6.3 (2026-09-11) `publish-loop-guard` 1.0.0→**1.1.0**：新增「长批次的硬停止时间」写法
-  （截止时间写进队列脚本，判定点放在间隔等待之后）；「已知坑」补**看门狗与 `inflight.json` 的启动竞态**
-  （顺序反了首轮会把整批在队稿件误报为漏发并立即告警退出）
-- v1.6.2 (2026-09-11) `windows-sandbox-workaround` 1.3.0→**1.4.0**：探活结论纠错
-  （裸 socket 探 loopback 在服务正常时也会超时 → 必须用 CDP HTTP 端点；chrome.exe 条数不可作证据）、
-  新增「Chrome 因 profile 占用 `code=0` 秒退不是错误」与「每篇发布前探活自动重启 Chrome」规则
-- v1.6.1 (2026-09-11) `windows-sandbox-workaround` 1.2.0→**1.3.0**：新增「本机进程排查的坑」
-  （venv python 父子双进程易误判并发队列、`wmic` 不可用、PowerShell stdout 需落盘再读、禁止从 Bash 调 PowerShell）
-- v1.6.0 (2026-09-11) 新增 `publish-loop-guard`（priority 28：「启动」触发词自动检索发布 + 每 30 分钟漏发复核）；
-  `timeliness-window` 1.1.0→**1.2.0**（新增选题配额：台风影响类每日 ≤1 篇 + `quota_check.py`）；
-  `publish-preflight-guard` 1.2.0→**1.4.0**（总检查 12→**13 项**，补队列「启动」与看门狗要求）
-- v1.5.0 (2026-09-11) `timeliness-window` 1.0.0→**1.1.0**：新增「可发布资格」（无直播且普通观众无法报名 → 不发；有直播必须提示直播信息），`check_window.py` 增 `--live` / `--public-signup` 与退出码 3；`publish-preflight-guard` 1.1.0→**1.2.0**（总检查 11→12 项）；表格版本列顺带修正
-- v1.4.0 (2026-09-11) `safe-wording-guard` 0.2.0→**0.3.0**：新增「涉港澳台强制表述规范」章节（统一中国香港/中国澳门/中国台湾地区，涉台只陈述事实）
-- v1.3.0 (2026-09-11) 新增 `timeliness-window`（priority 22，近 7 天时效窗口 + `check_window.py`
-  预检 + 待发池 `state/pending_pool.json`）；表格重排
-- v1.2.0 (2026-09-11) 新增 `publish-preflight-guard`（发布前 10 项总检查 + 队列控制）；
-  `writing-facts-only` v1.1.0（标题规则 + 活动必写参与方式）；
-  `cover-image-rules` v1.1.0（真实感优先 + 禁二维码 + 生图文件名冲突）；
-  `safe-wording-guard` v0.2.0（"免费+登记"组合判定的修法）；表格按 priority 重排并补版本列
-- v1.1.0 (2026-09-06) 新增 `safe-wording-guard`（站外导流等敏感词预检）
-- v1.0.0 (2026-09-04) 初版，从主 SKILL.md 抽出 4 个章节（封面规范、写作规范、间隔、Windows 适配），新增 update-checker 与本 INDEX
+- 各 patch 的历史变更放在对应的 `refs/*changelog*.md`。
+- 体系边界和跨体系冲突只看 [`SYSTEMS.md`](./SYSTEMS.md)。
+- 文档分层和体量限制只看 [`DOC_LAYOUT.md`](./DOC_LAYOUT.md)。
+- 上游同步、备份和回滚流程只看 [`UPGRADING.md`](./UPGRADING.md)。
+- 修改版本时同步更新 `SKILL.md`、`META.json`、本表版本列，并运行 `tools/check_patch_versions.py`。

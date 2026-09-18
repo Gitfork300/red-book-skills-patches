@@ -1,5 +1,6 @@
 ---
 name: update-checker
+system: shared
 version: 1.1.0
 patch_for: red-book-skills
 applies_to_main_version: ">=0.1.0"
@@ -49,8 +50,10 @@ python <patch>/helpers/update_check.py diff-local
 # 对比结果打 JSON（供自动化/脚本消费）
 python <patch>/helpers/update_check.py diff-local --json
 
-# 调整检查间隔（默认 604800 = 7 天）
-python <patch>/helpers/update_check.py set-interval 604800
+# 调整检查间隔（默认 604800 = 7 天；当前 432000 = 5 天）
+# ⚠️ 间隔必须显著小于触发周期（automation 每周五 10:00 = 7 天），
+#    否则「距上次 < 间隔」时 check 会静默 exit 0，检查被跳过且看不出来
+python <patch>/helpers/update_check.py set-interval 432000
 
 # 标记已读（避免重复提醒）
 python <patch>/helpers/update_check.py acknowledge --sha <commit-sha>

@@ -1,6 +1,16 @@
 """启动小红书专用 Chrome -> 取二维码 -> 窗口置顶 -> 轮询等待扫码登录。
 
 全程在同一次调用内完成，避免上层会话结束时 Chrome 被回收。
+
+用法：
+  python xhs_login_wait.py [等待秒数] [模式]
+
+模式：
+  （缺省）  登录成功后**优雅关闭** Chrome —— 确保 Cookie/会话落盘，
+            适合"登完就走、稍后再起"的场景
+  publish   登录成功后**不关窗，直接在同一会话内发布**
+  keep-open 登录成功后**保持窗口打开**（不关闭）—— 适合用户还想继续操作，
+            或需要立刻在同一会话里做后续任务（如平台只读核验）
 """
 import base64
 import json
@@ -309,6 +319,11 @@ def main():
             if ok:
                 clear_cache()
                 print(f"=== LOGIN_SUCCESS === {final_url}", flush=True)
+                if len(sys.argv) > 2 and sys.argv[2] == "keep-open":
+                    print("=== 4. keep-open：保持 Chrome 窗口打开，不关闭 ===", flush=True)
+                    print("    会话已在当前浏览器中生效；如需落盘保存，稍后正常关闭该窗口即可。",
+                          flush=True)
+                    return 0
                 if len(sys.argv) > 2 and sys.argv[2] == "publish":
                     print("=== 4. 浏览器保持打开，立即发布 ===", flush=True)
                     rc = publish()

@@ -1,5 +1,6 @@
 ---
 name: core-overrides
+system: shared
 version: 1.0.0
 patch_for: red-book-skills
 applies_to_main_version: ">=0.1.0"
@@ -38,7 +39,8 @@ created: 2026-09-12
 
 ## 加载方式
 
-主 skill 顶部 `Loaded patches` 段会引用本 patch。
+日常先加载根级 `red-book-skills-patch/SKILL.md`，再由其运行
+`tools/ensure_compatible.py`。该门面通过后，才允许把同级 `red-book-skills` 当作执行本体。
 **本 patch 的 `apply` 是让所有其他 patch 规则生效的前提**——因为主 `SKILL.md`
 本身就在覆盖清单里（各 patch 的规则被合并进了 SKILL.md）。
 

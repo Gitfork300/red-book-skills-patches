@@ -1,0 +1,32 @@
+{
+  "name": "comment-reply-guard",
+  "version": "1.15.0",
+  "system": "comment",
+  "patch_for": "red-book-skills",
+  "applies_to_main_version": ">=0.1.0",
+  "priority": 11,
+  "author": "Eric",
+  "created": "2026-09-14",
+  "dependencies": [],
+  "conflict_points": [
+    {
+      "with": "safe-wording-guard",
+      "description": "正文网址口径**刻意相反**：发布侧（safe-wording-guard）一律禁网址/裸域名；评论侧问「怎么报名」时必须给出完整 URL。详见 SYSTEMS.md 交叉点 X1。",
+      "resolution": "先判对象是「笔记」还是「回复」，再套对应规则；两侧**不得交叉否决**。"
+    },
+    {
+      "with": "writing-facts-only",
+      "description": "「只陈述事实」为两体系共用底线，但篇幅/分段/标题规则**不继承到回复**。见 SYSTEMS.md X2。",
+      "resolution": "回复沿用事实底线；不套用笔记的 200–600 字与字宽标题限制。"
+    },
+    {
+      "with": "publish-loop-guard",
+      "description": "回复定位依赖 note_id + xsec_token，来源是发布侧落盘的快照（单向数据流）。见 SYSTEMS.md X4。",
+      "resolution": "发布成功时应写 logs/xsec_snapshot_YYYYMMDD.json；评论侧只消费、不回写。"
+    }
+  ],
+  "files": [
+    "SKILL.md"
+  ],
+  "state_files": []
+}

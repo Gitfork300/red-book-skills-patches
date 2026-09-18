@@ -22,8 +22,12 @@ import sys
 from pathlib import Path
 
 
-# 平台硬限制（实测确认，2026-09-06）：
-# 标题超 20 字时，小红书不会报错、不会禁用按钮，而是点发布后完全静默失败
+# 平台硬限制（实测确认，2026-09-06；口径修正 2026-09-12）：
+# 标题上限 20 是「字宽」不是字符数：汉字/全角符号计 1，英文/数字/半角符号每 2 个计 1
+# （多方实现一致，例：hello=3、你好hello=4）。旧版按 len() 逐字符计数 → 误报。
+# 2026-09-12 复核实证：两篇已正常发布的标题被旧版判 P0——
+#   「2026外滩大会：9月9日至12日在上海举行」实宽 18；「外滩大会2020-2026：主题与规模演变」实宽 16.5。
+# 标题超限时，小红书不会报错、不会禁用按钮，而是点发布后完全静默失败
 # —— 不发请求、不弹提示，只有编辑器内部的 toast「标题最多输入20字哦~」。
 # 所以字数必须当作 P0 拦截，不能靠发布阶段发现。
 MAX_TITLE_CHARS = 20
@@ -73,6 +77,45 @@ P1_COMBO_PATTERNS: list[tuple[re.Pattern, re.Pattern, str]] = [
 ]
 
 
+# 电话号（手机号 / 座机 / 400 客服号）—— 平台视为导流违规
+# 用户 2026-09-13 口径：「文章不能有手机号码，会视为违规」。
+# 前缀手机号 11 位、以 1[3-9] 开头；座机带区号；允许号码内部用空格 / 短横分隔。
+# 左右边界排除 ASCII 字母 / 数字 / 点，避免把代码或编号里的数字串（如 ID13812345678）
+# 误判成电话；但中文 / 空格 / 标点后的号码仍会命中。
+PHONE_RE = re.compile(
+    r"(?<![A-Za-z0-9.])"
+    r"(?:"
+    r"1[3-9]\d{1,2}(?:[ -]?\d{4}){2}"   # 手机号（可含空格/短横）
+    r"|0\d{2,3}[ -]?\d{7,8}"             # 座机（区号+号码）
+    r"|400[ -]?\d{3}[ -]?\d{4}"          # 400 客服号
+    r")"
+    r"(?![A-Za-z0-9.])"
+)
+
+
+# 专题系列标题序号（P0）—— 用户 2026-09-18：「另外[专题] 后续不要写序号在主题中」。
+# 禁止 ①-⑳、（一）~（十）（全/半角括号）、系列① / 系列1 / 系列一。
+# 只查标题：正文里的序号（如议程"论坛（一）"）不受此限，避免误伤。
+TITLE_SERIAL_RE = re.compile(
+    r"[\u2460-\u2473]"                              # ①-⑳
+    r"|[（(]\s*[一二三四五六七八九十]\s*[）)]"        # （一）（二）…（全/半角括号）
+    r"|系列\s*[0-9一二三四五六七八九十①-⑳]"          # 系列① / 系列1 / 系列一
+)
+
+
+def check_title_serial(title: str | None) -> list[str]:
+    """专题标题不写序号（用户 2026-09-18），命中按 P0。仅查标题。"""
+    if not title:
+        return []
+    m = TITLE_SERIAL_RE.search(title)
+    if m:
+        return [
+            f"[P0] 标题含序号「{m.group()}」—— 用户规则（2026-09-18）："
+            "标题/主题不写序号（①、（一）、系列N 一律去掉），直接写内容本体"
+        ]
+    return []
+
+
 def check(text: str) -> tuple[int, list[str], list[str]]:
     text = text.strip()
     p0_hits: list[str] = []
@@ -81,6 +124,13 @@ def check(text: str) -> tuple[int, list[str], list[str]]:
     for pattern, msg in P0_PATTERNS:
         if re.search(pattern, text):
             p0_hits.append(f"[P0] {msg}")
+
+    m = PHONE_RE.search(text)
+    if m:
+        p0_hits.append(
+            f"[P0] 出现电话号「{m.group()}」—— 平台视为导流违规，正文一律不写电话，"
+            "改用『联系主办方官方账号』等表述"
+        )
 
     for pattern, msg in P1_PATTERNS:
         if re.search(pattern, text):
@@ -97,14 +147,25 @@ def check(text: str) -> tuple[int, list[str], list[str]]:
     return 0, [], []
 
 
+def title_width(text: str) -> float:
+    """小红书标题「字宽」：汉字/全角 = 1，英文/数字/半角 = 0.5。"""
+    return sum(0.5 if ord(ch) < 128 else 1.0 for ch in text)
+
+
+def _fmt_width(w: float) -> str:
+    return str(int(w)) if float(w).is_integer() else f"{w:g}"
+
+
 def check_length(title: str | None, content: str | None) -> list[str]:
     """平台硬限制检查：超长会导致发布静默失败，按 P0 处理。"""
     hits: list[str] = []
-    if title is not None and len(title.strip()) > MAX_TITLE_CHARS:
-        hits.append(
-            f"[P0] 标题 {len(title.strip())} 字，超过 {MAX_TITLE_CHARS} 字上限"
-            " —— 平台会静默拒绝发布（无报错、按钮仍可点）"
-        )
+    if title is not None:
+        w = title_width(title.strip())
+        if w > MAX_TITLE_CHARS:
+            hits.append(
+                f"[P0] 标题 {_fmt_width(w)}/{MAX_TITLE_CHARS} 字（按字宽计：汉字/全角=1，英文/数字/半角=0.5）"
+                " —— 平台会静默拒绝发布（无报错、按钮仍可点）"
+            )
     if content is not None and len(content.strip()) > MAX_CONTENT_CHARS:
         hits.append(
             f"[P0] 正文 {len(content.strip())} 字，超过 {MAX_CONTENT_CHARS} 字上限"
@@ -147,9 +208,10 @@ def main() -> int:
     text = "\n".join(parts)
     code, p0, p1 = check(text)
     p0 = p0 + check_length(args.title, args.content or (parts[-1] if args.file else None))
+    p0 = p0 + check_title_serial(args.title)
 
     if args.title:
-        print(f"标题 {len(args.title.strip())}/{MAX_TITLE_CHARS} 字", file=sys.stderr)
+        print(f"标题 {_fmt_width(title_width(args.title.strip()))}/{MAX_TITLE_CHARS} 字（字宽）", file=sys.stderr)
     if p0:
         code = 1
 

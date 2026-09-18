@@ -1,0 +1,67 @@
+{
+  "purpose": "整文件覆盖的隐性契约。我们替换上游整份文件，因此上游对这些文件的后续改动我们拿不到；反过来，上游若删改了我们依赖的符号，覆盖层虽 apply 成功也会运行时失效。本文件把这两类依赖显式化，供 tools/post_sync_check.py 在每次同步后自动核验。",
+  "updated": "2026-09-14",
+  "how_to_maintain": "改动 overrides/ 下这 3 个脚本时，若新增了对上游符号的依赖（调用了上游函数/读了上游常量），必须把该符号加进对应文件的 upstream_anchors，否则上游删改它时自检不会报警。",
+  "files": {
+    "scripts/cdp_publish.py": {
+      "note": "发布按钮三级激活（组件事件 → 真实鼠标 → 键盘 Enter）+ 失败时截图 xhs_publish_fail.png",
+      "we_add": [
+        "_activate_component_event",
+        "_activate_real_mouse",
+        "_activate_keyboard_enter",
+        "Publish activation attempt",
+        "xhs_publish_fail.png"
+      ],
+      "upstream_anchors": [
+        "class XiaohongshuPublisher",
+        "def _activate_publish_button",
+        "def _click_mouse",
+        "def _get_accessible_button_rect",
+        "def _wait_for_publish_response",
+        "def _sleep",
+        "def verify_note_submission",
+        "SELECTORS[\"publish_button_text\"]",
+        "SELECTORS[\"schedule_publish_button_text\"]",
+        "no Xiaohongshu note submission response"
+      ]
+    },
+    "scripts/chrome_launcher.py": {
+      "note": "Windows 下让 Chrome 脱离父 job object，避免启动器退出后 9222 端口约 5 秒内死亡",
+      "we_add": [
+        "CREATE_BREAKAWAY_FROM_JOB",
+        "popen_kwargs",
+        "close_fds"
+      ],
+      "upstream_anchors": [
+        "def launch_chrome(",
+        "_chrome_process",
+        "subprocess.Popen"
+      ]
+    },
+    "scripts/publish_pipeline.py": {
+      "note": "发布成功后调用 publish-interval-guard 写间隔记录；新增 --no-record 开关",
+      "we_add": [
+        "record_publish_interval",
+        "_find_interval_guard",
+        "--no-record",
+        "XHS_PUBLISH_INTERVAL_HELPER"
+      ],
+      "upstream_anchors": [
+        "def main():",
+        "def _select_topics(",
+        "parser.add_argument",
+        "CDPError",
+        "publish_result",
+        "share_link"
+      ]
+    },
+    "SKILL.md": {
+      "note": "整篇重写（上游骨架 + 我们的全部 patch 规则）。同步后 100% 冲突属预期，不要当异常处理。",
+      "we_add": [
+        "Loaded patches",
+        "references/01-publish-flow.md"
+      ],
+      "upstream_anchors": []
+    }
+  }
+}

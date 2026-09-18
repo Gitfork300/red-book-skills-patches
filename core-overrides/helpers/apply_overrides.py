@@ -13,8 +13,17 @@
   status                        本体每个覆盖文件的状态（APPLIED / PRISTINE / DRIFTED）
   verify                        校验本体 == overrides；不一致退出 1
   apply [--dry-run] [--backup]  把 overrides 复制到本体
+  rebase                        上游同步后刷新 baseline.json 的上游基线（见下）
   diff [路径]                   显示本体与 override 的差异
   hash                          重新计算并打印各文件指纹
+
+rebase 为什么必须存在：
+  baseline.json 里存着「上游原版」的 sha256，用来判断某文件是「上游新版待 apply」
+  还是「被人手改过」。上游一更新，旧的 upstream_sha256 就失效了 —— 此时本体的
+  新上游内容三者（override / 旧基线 / 上次 apply）都不匹配，会被 status 报成
+  DRIFTED「疑似直接改了本体」。照这条提示去「把改动搬进 overrides」，
+  等于把上游新版当成我们的定制写进覆盖层 —— 直接污染覆盖层。
+  所以：**每次用上游快照覆盖本体之后、apply 之前，必须先跑一次 rebase。**
 
 状态含义：
   APPLIED   本体已应用我们的版本（正常态）
@@ -37,6 +46,17 @@ import subprocess
 import sys
 from datetime import datetime
 
+# 输出统一 UTF-8。
+# 为什么必须显式设置：Windows 下 stdout 被重定向到文件或管道时，Python 会退回本地编码
+# （本机实测 cp1252），脚本里任何中文 print 都会抛 UnicodeEncodeError 并以退出码 1 结束。
+# 现象极具误导性 —— 命令看起来"失败了"，实际只是打印崩了。
+# 2026-09-17 实测：`apply_overrides.py status > out.txt` 直接 traceback。
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 PATCH_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 OVERRIDES = os.path.join(PATCH_ROOT, "overrides")
 BASELINE = os.path.join(PATCH_ROOT, "baseline.json")
@@ -44,8 +64,14 @@ STATE_DIR = os.path.join(PATCH_ROOT, "state")
 BACKUP_DIR = os.path.join(STATE_DIR, "backup")
 APPLIED_STATE = os.path.join(STATE_DIR, "applied.json")
 
-# PATCH_ROOT 是本 patch 目录；上两级才是 skills/，主 skill 与 patches 目录同级
-LOCAL_SKILL = os.path.normpath(os.path.join(PATCH_ROOT, "..", "..", "red-book-skills"))
+# PATCH_ROOT 是本 patch 目录；默认主 skill 与 patches 目录同级。
+# 安装器可用 RED_BOOK_SKILLS_ROOT 指向另一份本体，避免把路径写死。
+LOCAL_SKILL = os.path.normpath(
+    os.environ.get(
+        "RED_BOOK_SKILLS_ROOT",
+        os.path.join(PATCH_ROOT, "..", "..", "red-book-skills"),
+    )
+)
 
 STATUS_APPLIED = "APPLIED"
 STATUS_PRISTINE = "PRISTINE"
@@ -219,6 +245,100 @@ def cmd_apply(args):
     return cmd_verify(args)
 
 
+def cmd_rebase(args):
+    """把 baseline.json 的上游基线推进到「当前上游版本」。
+
+    两种取上游原版的方式：
+      --from <dir>   从上游快照目录读（推荐，与执行时机无关，最准）
+      缺省           从本体读；此时若文件处于 APPLIED 状态则拒绝，
+                     因为读到的会是我们自己的覆盖版本而非上游原版
+    """
+    base = _load_baseline()
+    applied = _load_applied()
+    files = _file_list()
+    src_dir = args.source
+
+    if src_dir and not os.path.isdir(src_dir):
+        print(f"!! 上游快照目录不存在：{src_dir}", file=sys.stderr)
+        return 2
+
+    if not src_dir:
+        risky = []
+        for rel in files:
+            lo = os.path.join(LOCAL_SKILL, rel)
+            if os.path.exists(lo) and _sha(lo) == _sha(os.path.join(OVERRIDES, rel)):
+                risky.append(rel)
+        if risky:
+            print("!! 拒绝 rebase：以下文件本体 == 覆盖层（已 apply），"
+                  "无法从中读出上游原版：", file=sys.stderr)
+            for r in risky:
+                print(f"     {r}", file=sys.stderr)
+            print("\n   请改用 --from <上游快照目录>，或先用上游快照覆盖本体再跑本命令。",
+                  file=sys.stderr)
+            return 2
+
+    result = {}
+    for rel in files:
+        if src_dir:
+            up_file = os.path.join(src_dir, rel)
+        else:
+            up_file = os.path.join(LOCAL_SKILL, rel)
+        if os.path.exists(up_file):
+            result[rel] = _sha(up_file)
+        else:
+            # 上游没有这个文件（例如我们自己新增的 references/）—— 记为缺席
+            result[rel] = None
+
+    changed, absent, unchanged = [], [], []
+    old_files = base.setdefault("files", {})
+    for rel, h in result.items():
+        old = (old_files.get(rel) or {}).get("upstream_sha256")
+        entry = old_files.setdefault(rel, {})
+        if h is None:
+            entry["upstream_sha256"] = None
+            entry["upstream_absent"] = True
+            absent.append(rel)
+        else:
+            entry["upstream_sha256"] = h
+            entry.pop("upstream_absent", None)
+            if old != h:
+                changed.append(rel)
+            else:
+                unchanged.append(rel)
+
+    if args.commit:
+        base["baseline_commit"] = args.commit
+    if args.date:
+        base["baseline_date"] = args.date
+    base["captured_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+
+    os.makedirs(PATCH_ROOT, exist_ok=True)
+    with open(BASELINE, "w", encoding="utf-8") as f:
+        json.dump(base, f, ensure_ascii=False, indent=2)
+
+    print(f"上游基线已推进  ({'来源: ' + src_dir if src_dir else '来源: 本体（未 apply 状态）'})")
+    print(f"  baseline_commit: {base.get('baseline_commit', '(未设置)')}")
+    print()
+    print(f"  upstream_sha256 变化   {len(changed)} 个")
+    for r in changed:
+        print(f"      {r}")
+    print(f"  upstream_sha256 未变   {len(unchanged)} 个")
+    print(f"  上游无此文件            {len(absent)} 个（我们独有，正常）")
+    for r in absent:
+        print(f"      {r}")
+    print()
+    if changed:
+        print("!! 上游改动了被我们覆盖的文件 —— 覆盖层还是旧版，直接 apply 会回退上游改动。")
+        print("   1) 读上游新版对应段落，把上游改动人工合并进 core-overrides/overrides/")
+        for r in changed:
+            print(f"      - {r}")
+        print("   2) 合并完再跑 apply；只有确认「上游改动与我们无关」才可跳过第 1 步")
+    else:
+        print("上游未改动被覆盖文件 —— 可直接 apply。")
+    print("\n下一步：python helpers/apply_overrides.py apply")
+    return 0
+
+
 def cmd_diff(args):
     base = _load_baseline()
     files = _file_list()
@@ -252,10 +372,13 @@ def cmd_hash(args):
 
 def main():
     p = argparse.ArgumentParser(description="本体覆盖层：应用/校验我们自己的改动")
-    p.add_argument("action", choices=["status", "verify", "apply", "diff", "hash"])
+    p.add_argument("action", choices=["status", "verify", "apply", "rebase", "diff", "hash"])
     p.add_argument("path", nargs="?", help="(diff 用) 指定单个文件")
     p.add_argument("--dry-run", action="store_true", help="(apply 用) 只报告不写入")
     p.add_argument("--backup", action="store_true", help="(apply 用) 保留原文件备份（默认即备份）")
+    p.add_argument("--from", dest="source", help="(rebase 用) 上游快照解压目录，推荐显式指定")
+    p.add_argument("--commit", help="(rebase 用) 新的上游 commit sha")
+    p.add_argument("--date", help="(rebase 用) 新的上游 commit 日期 ISO8601")
     args = p.parse_args()
 
     if not os.path.isdir(LOCAL_SKILL):
@@ -269,6 +392,7 @@ def main():
         "status": cmd_status,
         "verify": cmd_verify,
         "apply": cmd_apply,
+        "rebase": cmd_rebase,
         "diff": cmd_diff,
         "hash": cmd_hash,
     }[args.action](args)

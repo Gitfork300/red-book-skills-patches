@@ -35,7 +35,7 @@ PATCH_ROOT = os.path.normpath(os.path.join(HERE, ".."))
 CHECK = os.path.join(HERE, "check_missing.py")
 INFLIGHT = os.path.join(PATCH_ROOT, "state", "inflight.json")
 
-WS_DEFAULT = r"C:/Users/EricSupport(DMSH)/Documents/workbuddy-skill"
+WS_DEFAULT = os.environ.get("XHS_WORKSPACE") or os.path.expanduser("~/Documents/workbuddy-skill")
 FLOW_LOCK = os.environ.get("XHS_FLOW_LOCK") or os.path.join(WS_DEFAULT, "_xhs_publish.lock")
 
 

@@ -1,6 +1,7 @@
 {
   "name": "publish-preflight-guard",
-  "version": "1.8.0",
+  "system": "publish",
+  "version": "1.17.0",
   "patch_for": "red-book-skills",
   "applies_to_main_version": ">=0.1.0",
   "priority": 25,
@@ -9,10 +10,12 @@
   "dependencies": [
     "safe-wording-guard",
     "cover-image-rules",
-    "writing-facts-only"
+    "writing-facts-only",
+    "organizer-qualification-guard"
   ],
   "conflict_points": [],
   "files": [
-    "SKILL.md"
+    "SKILL.md",
+    "helpers/batch_preflight.py"
   ]
 }

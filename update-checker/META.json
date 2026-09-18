@@ -1,5 +1,6 @@
 {
   "name": "update-checker",
+  "system": "shared",
   "version": "1.1.0",
   "patch_for": "red-book-skills",
   "applies_to_main_version": ">=0.1.0",

@@ -1,16 +1,25 @@
 """选题配额闸门 —— 某些高频、易刷屏的选题每天限发篇数。
 
-当前唯一硬配额（用户 2026-09-11 要求）：
-  **台风影响类，每自然日至多 1 篇**（以发布日志里的发布时间所在日期计）。
+当前硬配额：
+  **恶劣天气类（含台风影响 / 预警 / 热带系统），每自然日限 1 篇；
+  当日涉及红色或黑色预警时，放宽至 3 篇。**
+
+  - 「每自然日至多 1 篇」为用户 2026-09-11 要求；
+  - 「红色 / 黑色预警放宽到 3 篇」为用户 2026-09-15 要求，
+    **仅在传入的预警级别为红 / 黑色时生效**，蓝 / 黄 / 橙 / 未指定一律仍按 1 篇计。
 
 为什么单独成脚本：配额是"跨篇"约束，单篇预检看不出来；
-一旦当天已经发过一篇台风，第二篇即使时效、资格、用词、封面全过也必须压住。
+一旦当天已经发了上限篇数，再发即使时效、资格、用词、封面全过也必须压住。
 
 用法：
-  quota_check.py --kind typhoon                 # 查今天台风类已发几篇
-  quota_check.py --kind typhoon --date 2026-09-11
-  quota_check.py --kind typhoon --limit 1 --json
-  quota_check.py --kind typhoon --add --title "标题"   # 预占配额（发布前登记，可选）
+  quota_check.py --kind weather                        # 默认 1 篇
+  quota_check.py --kind weather --level 红              # 红/黑色 → 3 篇
+  quota_check.py --kind weather --level black          # 支持 black / 黑色 / 黑
+  quota_check.py --kind weather --level 橙色            # 非红非黑 → 仍 1 篇
+  quota_check.py --kind typhoon --level red            # typhoon 是 weather 的别名，同一套配额
+  quota_check.py --kind weather --date 2026-09-15
+  quota_check.py --kind weather --json
+  quota_check.py --kind weather --add --title "标题"    # 预占配额（发布前登记，可选）
 
 退出码：
   0 = 配额未满，可以发
@@ -33,15 +42,56 @@ LOG_PATH = os.environ.get("XHS_INTERVAL_LOG") or os.path.join(
     PATCHES_ROOT, "publish-interval-guard", "state", "publish_log.json"
 )
 
+# 恶劣天气 / 台风影响 —— 合并为一个配额池（"预警"本身也是天气影响内容，不拆类计数）
+_WEATHER_SPEC = {
+    "label": "恶劣天气（含台风影响）",
+    "limit": 1,          # 蓝 / 黄 / 橙 / 未指定
+    "limit_high": 3,     # 红色 / 黑色预警
+    "level_sensitive": True,
+    "keywords": [
+        # —— 热带系统 ——
+        "台风", "热带低压", "热带风暴", "强热带风暴", "超强台风",
+        "热带扰动", "南海扰动", "风暴潮",
+        # —— 灾害类型 ——
+        "暴雨", "强降水", "强对流", "雷暴", "雷雨大风", "冰雹",
+        "高温", "寒潮", "低温", "大风", "大雾", "霾", "内涝",
+        # —— 通用 ——
+        "预警",
+    ],
+}
+
 KINDS = {
-    "typhoon": {
-        "label": "台风影响",
-        "limit": 1,
-        "keywords": ["台风", "热带低压", "热带风暴", "强热带风暴", "超强台风",
-                     "热带扰动", "南海扰动", "风暴潮"],
-    },
+    "weather": _WEATHER_SPEC,
+    "typhoon": _WEATHER_SPEC,   # 别名：台风影响与恶劣天气共用同一配额池
 }
 GLOBAL_LIMIT = 1  # 默认每类每天 1 篇
+
+
+def _norm(level):
+    """级别归一化：红色→红、black→黑、RED→红。"""
+    s = str(level or "").strip().lower()
+    if s in {"红", "红色", "red", "r"}:
+        return "红"
+    if s in {"黑", "黑色", "black", "b"}:
+        return "黑"
+    for canon in ("红", "黑"):
+        if s.startswith(canon):
+            return canon
+    if s.startswith("red"):
+        return "红"
+    if s.startswith("black"):
+        return "黑"
+    return s
+
+
+def effective_limit(spec, level, override=None):
+    """算出当日有效上限，并返回 (limit, tier) —— tier 用于打印口径来源。"""
+    base = override if override is not None else spec.get("limit", GLOBAL_LIMIT)
+    if level and spec.get("level_sensitive"):
+        norm = _norm(level)
+        if norm in {"红", "黑"}:
+            return spec.get("limit_high", base), f"红/黑色预警 → 放宽至 {spec.get('limit_high', base)} 篇"
+    return base, f"{spec.get('label', '')}常规 → {base} 篇"
 
 
 def _load_log(log_path):
@@ -73,9 +123,11 @@ def count_on(date_str, keywords, log_path):
 
 def main():
     ap = argparse.ArgumentParser(description="选题配额闸门")
-    ap.add_argument("--kind", default="typhoon", choices=sorted(KINDS.keys()))
+    ap.add_argument("--kind", default="weather", choices=sorted(KINDS.keys()))
+    ap.add_argument("--level", default=None,
+                    help="本条稿件对应的预警级别（红/黑/橙/黄/蓝）；红或黑时上限放宽至 3 篇")
     ap.add_argument("--date", default=None, help="YYYY-MM-DD，默认今天")
-    ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--limit", type=int, default=None, help="手工覆盖上限（优先于级别推算）")
     ap.add_argument("--keywords", default=None, help="自定义关键词，逗号分隔")
     ap.add_argument("--log", default=LOG_PATH)
     ap.add_argument("--json", action="store_true")
@@ -84,8 +136,10 @@ def main():
     spec = KINDS[args.kind]
     keywords = ([k.strip() for k in args.keywords.split(",") if k.strip()]
                 if args.keywords else spec["keywords"])
-    limit = args.limit if args.limit is not None else spec.get("limit", GLOBAL_LIMIT)
+    limit, tier = effective_limit(spec, args.level, args.limit)
     date_str = args.date or datetime.now().strftime("%Y-%m-%d")
+
+    level_norm = _norm(args.level) if args.level else ""
 
     hits = count_on(date_str, keywords, args.log)
     used = len(hits)
@@ -96,6 +150,8 @@ def main():
             "kind": args.kind,
             "label": spec["label"],
             "date": date_str,
+            "level": level_norm or None,
+            "tier": tier,
             "used": used,
             "limit": limit,
             "allow": ok,
@@ -103,7 +159,9 @@ def main():
                       "note_id": h.get("note_id")} for h in hits],
         }, ensure_ascii=False))
     else:
-        print(f"[quota] {date_str} 「{spec['label']}」已发 {used}/{limit} 篇")
+        lv = f"（级别：{level_norm}）" if level_norm else "（未指定级别 → 按常规上限）"
+        print(f"[quota] {date_str} 「{spec['label']}」已发 {used}/{limit} 篇{lv}")
+        print(f"[quota] 口径：{tier}")
         for h in hits:
             print(f"  - {h.get('ts')} {h.get('title')}")
         if ok:

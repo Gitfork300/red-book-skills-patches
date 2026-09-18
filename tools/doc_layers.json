@@ -1,0 +1,236 @@
+{
+  "_comment": "文档分层校验的清单。anchors 是「关键锚点词」—— 拆分后主入口必须仍包含这些词，用于在规则被误删时立刻报错。新增拆分目标时在这里加条目。",
+  "entries": [
+    {
+      "id": "workspace-memory",
+      "root": "${WORKSPACE}/.workbuddy/memory",
+      "main": "MEMORY.md",
+      "detail_dirs": ["topics"],
+      "limit_main": 2900,
+      "limit_main_lines": 90,
+      "limit_detail": 9000,
+      "limit_detail_lines": 260,
+      "anchors": [
+        "不要直接改本体",
+        "D+7",
+        "8 分钟",
+        "无人物",
+        "字宽",
+        "dup_check",
+        "打星评级",
+        "nmc.cn"
+      ]
+    },
+    {
+      "id": "main-skill",
+      "root": "${PATCH_ROOT}/core-overrides/overrides",
+      "main": "SKILL.md",
+      "detail_dirs": ["references"],
+      "limit_main": 6000,
+      "limit_main_lines": 180,
+      "limit_detail": 9000,
+      "limit_detail_lines": 260,
+      "anchors": [
+        "不要直接改本体",
+        "8 分钟",
+        "字宽",
+        "无人物",
+        "dup_check",
+        "verify-note",
+        "江浙沪",
+        "POST /web_api/sns/v2/note",
+        "评级块",
+        "README.md"
+      ]
+    },
+    {
+      "id": "comment-reply-guard",
+      "root": "${PATCH_ROOT}/comment-reply-guard",
+      "main": "SKILL.md",
+      "detail_dirs": ["refs"],
+      "limit_main": 6000,
+      "limit_main_lines": 180,
+      "limit_detail": 9000,
+      "limit_detail_lines": 260,
+      "anchors": [
+        "comment-",
+        "叻叻财",
+        "36 小时",
+        "报名网址",
+        "[A1]",
+        "COMMENT_REMINDERS",
+        "data-conv-id"
+      ]
+    },
+    {
+      "id": "windows-sandbox-workaround",
+      "root": "${PATCH_ROOT}/windows-sandbox-workaround",
+      "main": "SKILL.md",
+      "detail_dirs": ["refs"],
+      "limit_main": 6000,
+      "limit_main_lines": 180,
+      "limit_detail": 9000,
+      "limit_detail_lines": 260,
+      "anchors": [
+        "keep-open",
+        "Login confirmed",
+        "run_in_background",
+        "TLS",
+        "tasklist",
+        "Browser.close",
+        "先排除我方问题"
+      ]
+    },
+    {
+      "id": "publish-loop-guard",
+      "root": "${PATCH_ROOT}/publish-loop-guard",
+      "main": "SKILL.md",
+      "detail_dirs": ["refs"],
+      "limit_main": 6000,
+      "limit_main_lines": 180,
+      "limit_detail": 9000,
+      "limit_detail_lines": 260,
+      "anchors": [
+        "dup_check",
+        "双源",
+        "inflight.json",
+        "30 分钟",
+        "类别化",
+        "watch_missing",
+        "A 类"
+      ]
+    },
+    {
+      "id": "timeliness-window",
+      "root": "${PATCH_ROOT}/timeliness-window",
+      "main": "SKILL.md",
+      "detail_dirs": ["refs"],
+      "limit_main": 6000,
+      "limit_main_lines": 180,
+      "limit_detail": 9000,
+      "limit_detail_lines": 260,
+      "anchors": [
+        "D+7",
+        "免费登记",
+        "邀请制",
+        "江浙沪",
+        "珠三角",
+        "15 天",
+        "check_window",
+        "geo_check"
+      ]
+    },
+    {
+      "id": "publish-preflight-guard",
+      "root": "${PATCH_ROOT}/publish-preflight-guard",
+      "main": "SKILL.md",
+      "detail_dirs": ["refs"],
+      "limit_main": 6000,
+      "limit_main_lines": 180,
+      "limit_detail": 9000,
+      "limit_detail_lines": 260,
+      "anchors": [
+        "17 项",
+        "dup_check",
+        "geo_check",
+        "check_window",
+        "net_probe",
+        "check_organizer",
+        "评级块",
+        "8~12 分钟",
+        "batch_preflight"
+      ]
+    },
+    {
+      "id": "writing-facts-only",
+      "root": "${PATCH_ROOT}/writing-facts-only",
+      "main": "SKILL.md",
+      "detail_dirs": ["refs"],
+      "limit_main": 6000,
+      "limit_main_lines": 180,
+      "limit_detail": 9000,
+      "limit_detail_lines": 260,
+      "anchors": [
+        "只陈述事实",
+        "200–600",
+        "评级块",
+        "综合",
+        "最后一行",
+        "search-feeds",
+        "双源"
+      ]
+    },
+    {
+      "id": "xhs-risk-guard",
+      "root": "${PATCH_ROOT}/xhs-risk-guard",
+      "main": "SKILL.md",
+      "detail_dirs": ["refs"],
+      "limit_main": 6000,
+      "limit_main_lines": 180,
+      "limit_detail": 9000,
+      "limit_detail_lines": 260,
+      "anchors": [
+        "25 篇",
+        "4 小时",
+        "假风控",
+        "read-body",
+        "risk_state",
+        "先排除",
+        "maxPostDataSize"
+      ]
+    },
+    {
+      "id": "safe-wording-guard",
+      "root": "${PATCH_ROOT}/safe-wording-guard",
+      "main": "SKILL.md",
+      "detail_dirs": ["refs"],
+      "limit_main": 6000,
+      "limit_main_lines": 180,
+      "limit_detail": 9000,
+      "limit_detail_lines": 260,
+      "anchors": [
+        "裸域名",
+        "20",
+        "字宽",
+        "check_wording",
+        "P0",
+        "扫码",
+        "电话"
+      ]
+    },
+    {
+      "id": "cover-image-rules",
+      "root": "${PATCH_ROOT}/cover-image-rules",
+      "main": "SKILL.md",
+      "detail_dirs": ["refs"],
+      "limit_main": 6000,
+      "limit_main_lines": 180,
+      "limit_detail": 9000,
+      "limit_detail_lines": 260,
+      "anchors": [
+        "官方宣传图",
+        "80%",
+        "check_cover_source",
+        "content-declaration",
+        "紧急事件"
+      ]
+    },
+    {
+      "id": "publish-interval-guard",
+      "root": "${PATCH_ROOT}/publish-interval-guard",
+      "main": "SKILL.md",
+      "detail_dirs": ["refs"],
+      "limit_main": 6000,
+      "limit_main_lines": 180,
+      "limit_detail": 9000,
+      "limit_detail_lines": 260,
+      "anchors": [
+        "480–720",
+        "reserve",
+        "verify-note",
+        "found:true",
+        "publish_log.json"
+      ]
+    }
+  ]
+}

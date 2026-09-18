@@ -10,14 +10,54 @@ core-overrides/state/backup/
 # ── 日志/状态备份 ────────────────────────────────
 *.bak
 
+# ── 运行时状态与日志（非源码、日抛，不入库）────────────
+# state/*.json 是运行时判据数据（publish_log / update_state / applied /
+# pending_pool / abandoned / inflight / risk_state），每次运行都会变、
+# 持续脏化工作区；跨机器同步反而会把本机的瞬时状态带过去。
+# 版本快照由 tools/backup_snapshots.py 承担，state 不入库。
+**/state/*
+!**/state/README.md
+!**/state/.gitkeep
+!**/state/backup/
+**/state/backup/*
+!**/state/backup/README.md
+!**/state/backup/.gitkeep
+
+# 各 patch 的 logs/ 运行时日志，同理不入库。
+**/logs/*
+*.log
+!**/logs/README.md
+!**/logs/.gitkeep
+
+# ── 登录态与凭据（绝不入库）──────────────────────
+# 浏览器导出的 cookie、账号配置、会话缓存和认证响应均属本机私有数据。
+*.cookie
+*.cookies
+cookies.json
+accounts.json
+credentials.json
+auth.json
+session.json
+session/
+sessions/
+auth/
+credentials/
+profiles/
+browser-profile/
+chrome-profile/
+
+# ── 手工备份快照（_archive/bak_*）──────────────────
+# 只留最近 3 轮在工作区，更早的交给 git 历史（见 DOC_LAYOUT.md「定期整理机制」）。
+_archive/
+
+# ── 上游只读备份（不作为 Patch、不参与公开同步）────────
+# red-book-skills-upstream 仅用于本地对照和兼容检查；运行时加载只认上游安装目录
+# 与本目录下的 Patch，避免把整份上游再次复制进 Patch 仓库。
+red-book-skills-upstream/
+
 # ── 编辑器 / 系统 ────────────────────────────────
 .vscode/
 .idea/
 *.swp
 .DS_Store
 Thumbs.db
-
-# ── 刻意保留入库的内容 ───────────────────────────
-# 各 patch 的 state/*.json（publish_log / update_state / applied /
-# pending_pool / abandoned / inflight）体积小，且跨机器同步时是
-# 需要的判据数据，故不排除。

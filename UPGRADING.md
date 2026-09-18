@@ -18,6 +18,10 @@
 本体里有 4 个文件被我们改过，它们的**权威副本在 `core-overrides/overrides/`**。
 所以同步上游 = 覆盖本体 → `apply` 一次。
 
+本目录下的 `red-book-skills-upstream/` 只是上游只读备份，含原作者提示文件；
+它不属于 Patch，不参与加载，也不应提交到公开 Patch 仓库。不要把它复制进
+`core-overrides/overrides/`，否则会造成重复本体和加载歧义。
+
 > **不再需要人工逐条"把本地改动打回去"。** 旧版本文件里那张 22 条的迁移清单
 > 已被 `core-overrides` 机制取代，清单内容现在等价于覆盖层的 4 个文件（见
 > `core-overrides/SKILL.md` 的「覆盖清单」）。
@@ -27,28 +31,70 @@
 ```bash
 PY=<解释器>   # 建议 <本体>/.venv/Scripts/python.exe
 P=~/.workbuddy/skills/red-book-skills-patches
+UP=<上游快照解压目录>      # 全程保留，第 2、3 步都要用
 
 # 0. 先看清上游改了什么、会不会和我们的覆盖撞车
 $PY $P/update-checker/helpers/update_check.py diff-local
 #    看到「覆盖层冲突检查」报 !! → 先停止，按「覆盖层冲突处理」合并
 
-# 1. 覆盖本体（本体已 git 化，但仍需 tarball 覆盖 —— 见下节）
-#    ...
+# 0.5 新电脑或清理过运行时目录时，先恢复空目录结构
+$PY $P/tools/init_runtime.py
+#    只创建目录，不生成状态、业务数据或登录态
 
-# 2. 重新应用我们的覆盖
+# 1. 取上游快照（codeload，详见下节）—— 解压到 $UP 后别删
+
+# 2. 覆盖本体
+cp -r $UP/. "<本体>/"
+
+# 3. 推进上游基线 ← 不可省略，见「为什么必须先 rebase」
+$PY $P/core-overrides/helpers/apply_overrides.py rebase --from $UP --commit <新 sha>
+#    报「上游改动了被我们覆盖的文件」→ 先按「覆盖层冲突处理」合并，再继续
+
+# 4. 重新应用我们的覆盖
 $PY $P/core-overrides/helpers/apply_overrides.py status   # 预期全部 PRISTINE
 $PY $P/core-overrides/helpers/apply_overrides.py apply
 
-# 3. 校验
-$PY $P/core-overrides/helpers/apply_overrides.py verify   # 预期 OK
+# 5. 同步后自检（契约 + 未吸收改动）
+$PY $P/tools/post_sync_check.py --upstream $UP             # 预期 OK，exit 0
 
-# 4. 跑自测 + 端到端
+# 6. 跑自测 + 端到端
 <本体>/.venv/Scripts/python.exe -m pytest <本体>/tests/ -q
 
-# 5. 更新基线 + 标记已读
-#    把 core-overrides/baseline.json 的 baseline_commit / upstream_sha256 更新为新的上游版本
+# 7. 标记已读
 $PY $P/update-checker/helpers/update_check.py acknowledge --sha <新 sha>
 ```
+
+### 为什么必须先 rebase（否则会污染覆盖层）
+
+`baseline.json` 存着「上游原版」的 sha256，`status` 靠它区分两种状态：
+
+| 本体现在是什么 | 判定 | 提示 |
+| --- | --- | --- |
+| 上游原版 | `PRISTINE` | 跑 apply |
+| 有人手改过 | `DRIFTED` | 把改动搬进 overrides |
+
+上游一更新，旧的 `upstream_sha256` 就失效了 —— 本体里是新上游内容，与
+override / 旧基线 / 上次 apply **三者都不匹配**，`status` 会把它判成 `DRIFTED`。
+
+照那条提示去做「把改动搬进 overrides」，等于**把上游新版当成我们的定制写进覆盖层**——
+覆盖层当场被污染，而且很难察觉。
+
+`rebase` 就是把基线推进到新的上游版本，让判定恢复正确。**每次覆盖本体后、apply 前必做。**
+
+> 安全护栏：不带 `--from` 时，若发现本体已 apply（本体 == 覆盖层），
+> 命令会**拒绝执行**并退出 2 —— 因为那种状态下读出来的是我们自己的版本，
+> 写进基线等于把覆盖层认成上游。
+
+### 自检脚本在查什么
+
+`tools/post_sync_check.py` 补上 `status/verify` 回答不了的两件事（详见
+「整文件覆盖的代价」）：
+
+- **契约检查**：`core-overrides/contracts.json` 列出我们依赖的上游符号。
+  上游若删改了它们，覆盖层 apply 照样成功，但**运行时才炸** —— 脚本提前报警。
+- **未吸收改动**：上游在我们锁死的文件里改了多少行，提醒人工评估是否要合并。
+
+脚本会区分「上游新改动」与「纯我们的定制」（后者不报警，避免告警疲劳）。
 
 ## 本体已 git 化（2026-09-12）—— 但仍不能靠 `git pull` 同步
 
@@ -132,8 +178,46 @@ git checkout .          # 或 git reset --hard / git stash / git clean
 1. `diff-local` 看到上游版本，人工读上游改了什么
 2. 把上游改动**手工合并**进 `core-overrides/overrides/<文件>`
    （即：让覆盖层 = 上游新版 + 我们的改动）
-3. `apply_overrides.py apply`
-4. 更新 `baseline.json` 的 `upstream_sha256` 为新的上游 hash，`baseline_commit` 为新 commit
+3. `apply_overrides.py rebase --from $UP --commit <新 sha>`（推进上游基线，替代手工改 JSON）
+4. `apply_overrides.py apply`
+5. `tools/post_sync_check.py --upstream $UP` —— 确认契约还在、差异只剩我们的定制
+6. `update_check.py acknowledge --sha <新 sha>`
+
+## 整文件覆盖的代价（必读）
+
+`core-overrides` 的做法是**整份文件替换**，不是打 patch。这有个容易被忽略的代价：
+
+> **上游对我们覆盖的文件的后续改动，我们一份都拿不到。**
+> 文件被锁死在 `b006891a`（2026-08-27）那一版，直到有人手工合并。
+
+上游更新越频繁，这个窟窿越大。三个脚本当前的锁定规模：
+
+| 文件 | 我们的改动 | 被锁住的上游内容 |
+| --- | --- | --- |
+| `scripts/cdp_publish.py` | +93 / -7 | 整个 6116 行文件的其余全部 |
+| `scripts/chrome_launcher.py` | +21 / -5 | 同上 |
+| `scripts/publish_pipeline.py` | +106 / -0 | 同上 |
+| `SKILL.md` | 整篇重写 | 上游骨架（**100% 冲突属预期，不是异常**） |
+
+应对三条：
+
+1. **每次同步必跑 `post_sync_check.py --upstream $UP`** —— 它会报出上游在我们
+   锁死的文件里改了什么，以及我们依赖的符号是否还在（`contracts.json`）
+2. **改动面最小的文件优先合并上游** —— `chrome_launcher.py` 只有 +21 行，
+   重做成本最低；`cdp_publish.py` 改动嵌在类方法里，合并要最小心
+3. **长期可考虑降级为「最小侵入」** —— 用 wrapper 脚本 import 上游模块后做猴子补丁，
+   而不是整文件替换，这样上游文件保持原样、更新自动生效。
+   **当前不实施**：三个脚本都是 CLI 入口，包装需要改调用链，风险高于收益。
+   若上游开始高频更新 `scripts/`，再重新评估。
+
+`contracts.json` 里每个文件都记了两类东西，改覆盖层时要同步维护：
+
+| 字段 | 含义 | 何时更新 |
+| --- | --- | --- |
+| `we_add` | 我们注入的特征串 | 改动特征串时 |
+| `upstream_anchors` | **我们调用的上游符号** | 新增对上游函数/常量的依赖时 |
+
+漏了 `upstream_anchors` 的后果：上游删掉该符号时，自检不会报警，覆盖层静默失效。
 
 ## 三种更新场景与对应处理
 
@@ -191,9 +275,25 @@ git checkout .          # 或 git reset --hard / git stash / git clean
 
 `update-checker` 已注册每周五 10:00 自动检查（automation id `7d437f5c`）。
 
-> **已知特性**：`check` 在"距上次 < interval(7天)"时直接 `exit 0` 且**不写状态**。
-> 于是"每周五触发 + 7 天间隔"实际约**每两周才真检查一次**。
-> 若要每周必查，跑 `update_check.py set-interval 518400`（6 天）。
+> **⚠️ 间隔必须小于触发周期，否则检查会被静默跳过。**
+> `check` 在「距上次 < interval」时直接 `exit 0` 且**不写状态** ——
+> 所以「每周触发 + 间隔 ≥ 7 天」会退化成约**每两周才真检查一次**，
+> 而且从外面看不出区别（退出码同样是 0）。
+>
+> **当前配置**：`interval_sec = 432000`（**5 天**），触发为每周五 10:00。
+> 为什么不是 6 天：触发周期是 7 天，间隔取 6 天时余量只有 1 天，
+> 一旦有人在周四晚或周五上午手工跑过 `check`，`last_check` 被推后，
+> 下个周五触发时距它不足 6 天 → **那次静默跳过**。2026-09-14 实测就处于临界：
+> 上次 09-12 09:36，下次触发 09-18 10:00，只多出 **23 分钟**。
+> 取 5 天后，最坏情况（手工检查恰好卡在 automation 前 1 分钟）仍有约 2 天余量。
+>
+> 一句话：**间隔要显著小于触发周期，别贴着设。**
+>
+> 自检：`update_check.py status` 看 `interval` 与「下次检查」两个字段。
+>
+> 副作用：手工跑一次 `check` 会把 `last_check` 推后，若紧接着的那个周五
+> 距它不足 6 天，automation 那次会**静默跳过**。所以手工查完最好看一眼
+> `status` 的「下次检查」是否仍在预期窗口内。
 
 检测到更新后：
 
@@ -269,8 +369,11 @@ $PY $P/tools/backup_snapshots.py --force        # 修好原因后重跑
 | `git fetch upstream` 报 502 / 连接超时 | 本机 `github.com` git 端点不可达 | 改用 `codeload` tarball 覆盖（见「本体已 git 化」一节） |
 | `git status` 显示十几个文件全 modified | `core.autocrlf` 被设成了 `false` | `git config core.autocrlf true` 后重看 |
 | 覆盖产物"不见了"（`git status` 变干净） | 误跑 `git checkout .` / `reset --hard` / `stash` | `apply_overrides.py status` 会报 `PRISTINE`，跑 `apply` 恢复 |
-| `apply_overrides.py status` 报 `DRIFTED` | 有人直接改了本体 | 把该改动搬进 `overrides/`，再 `apply` |
+| `apply_overrides.py status` 报 `DRIFTED` | 有人直接改了本体；**或刚同步过上游但没 rebase** | 后者是误报 —— 先跑 `rebase --from $UP`，再 `status`；确认不是刚同步才按"手改"处理 |
 | `apply_overrides.py status` 报 `PRISTINE` | 刚覆盖过本体还没 apply | 跑 `apply` |
+| `rebase` 拒绝执行（退出 2） | 本体已 apply，读不出上游原版 | 加 `--from <上游快照目录>`；或先用上游快照覆盖本体 |
+| `post_sync_check.py` 报 BREAKING | 上游删改了我们依赖的符号 | 按提示改 `overrides/` 对应文件适配；改完同步更新 `contracts.json` |
+| `post_sync_check.py` 退出 1（未吸收改动） | 上游改了我们锁死的文件 | 读上游 diff，把与我们无关的改动合并进覆盖层（见「整文件覆盖的代价」） |
 | `diff-local` 报覆盖层冲突 | 上游也改了被覆盖文件 | 按「覆盖层冲突处理」合并，**别直接覆盖** |
 | patch helper 报 `ModuleNotFoundError` | 主 skill 重装后 `.venv` 没了 | `cd <本体> && .venv/Scripts/python.exe -m pip install -r requirements.txt` |
 | `verify-note` 找不到精确标题 | 主 skill 改了 `SELECTORS` | 查覆盖层 `overrides/scripts/cdp_publish.py` 与上游差异 |
@@ -330,6 +433,18 @@ $PY $P/core-overrides/helpers/apply_overrides.py apply      # 重新叠回我们
 
 ## 修改记录
 
+- v1.10.1 (2026-09-14) 修正「自动化检查」间隔：
+  - 文档写着"实际每两周才查一次、若要每周必查请改 518400"，但**间隔早就是 518400 了**
+    —— 照文档去改等于白改。改为说明「间隔必须 < 触发周期」的原理
+  - **并把 6 天改为 5 天（432000）**：6 天时余量只有 1 天，实测下次触发仅多出 23 分钟，
+    手工检查稍晚就会让那次周五静默跳过；5 天时最坏情况仍有约 2 天余量
+  - 补「手工跑 check 会推迟自动检查」的副作用说明
+- v1.10.0 (2026-09-14) **应对主体不定期更新**：新增 `apply_overrides.py rebase`
+  （推进上游基线，替代手工改 `baseline.json`，带"已 apply 则拒绝"护栏）；
+  新增 `core-overrides/contracts.json` + `tools/post_sync_check.py`（契约自检 +
+  BREAKING 探测 + 未吸收改动统计，能区分"上游新改动"与"纯我们的定制"）；
+  新增「整文件覆盖的代价（必读）」；标准同步流程插入 rebase/自检两步；
+  故障排查表补 4 条
 - v1.9.0 (2026-09-12) **新增「版本备份（防丢失）」**：`tools/backup_snapshots.py` 对本体与
   补丁仓的**工作区**做快照（含 `.git`、未跟踪文件、未提交的覆盖产物），落到
   `~/Documents/red-book-skills-backup/`；指纹去重、保留 30 份、单份约 0.8 MB，

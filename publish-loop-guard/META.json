@@ -1,6 +1,7 @@
 {
   "name": "publish-loop-guard",
-  "version": "1.3.0",
+  "system": "publish",
+  "version": "1.8.1",
   "patch_for": "red-book-skills",
   "applies_to_main_version": ">=0.1.0",
   "priority": 28,
@@ -9,9 +10,15 @@
   "dependencies": [
     "publish-interval-guard",
     "timeliness-window",
-    "publish-preflight-guard"
+    "publish-preflight-guard",
+    "xhs-risk-guard"
   ],
   "conflict_points": [
+    {
+      "with": "xhs-risk-guard",
+      "description": "读取类 helper（read_note_body.py）的风控额度/熔断/冷却由该 patch 统一提供，本 patch 不再自定义规则。",
+      "resolution": "read_note_body.py 启动时 import xhs-risk-guard/helpers/risk_state.py；import 失败则降级为内置保守默认（25 篇 / 连续 3 次熔断）"
+    },
     {
       "with": "publish-interval-guard",
       "description": "两者都会读 publish_log.json 判定状态。本 patch 只读，不写；间隔记录仍由 publish-interval-guard 独占。",
@@ -28,7 +35,9 @@
     "helpers/check_missing.py",
     "helpers/watch_missing.py",
     "helpers/dup_check.py",
-    "helpers/recent_published.py"
+    "helpers/recent_published.py",
+    "helpers/list_all_notes.py",
+    "helpers/read_note_body.py"
   ],
   "state_files": [
     "state/inflight.json",

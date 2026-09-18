@@ -34,6 +34,7 @@
   2 = 参数或环境错误
 
 环境变量：
+  XHS_WORKSPACE      工作区根目录（换机器必设），默认 ~/Documents/workbuddy-skill
   XHS_DRAFT_DIR      稿件目录，默认 <workspace>/xhs_publish
   XHS_INTERVAL_LOG   发布日志，默认 <patches>/publish-interval-guard/state/publish_log.json
   XHS_PENDING_POOL   待发池，默认 <patches>/timeliness-window/state/pending_pool.json
@@ -53,7 +54,7 @@ PATCH_ROOT = os.path.normpath(os.path.join(HERE, ".."))          # <patch>/publi
 PATCHES_ROOT = os.path.normpath(os.path.join(PATCH_ROOT, ".."))  # <skills>/red-book-skills-patches
 SKILLS_ROOT = os.path.normpath(os.path.join(PATCHES_ROOT, ".."))
 
-WS_DEFAULT = r"C:/Users/EricSupport(DMSH)/Documents/workbuddy-skill"
+WS_DEFAULT = os.environ.get("XHS_WORKSPACE") or os.path.expanduser("~/Documents/workbuddy-skill")
 DRAFT_DIR = os.environ.get("XHS_DRAFT_DIR") or os.path.join(WS_DEFAULT, "xhs_publish")
 LOG_PATH = os.environ.get("XHS_INTERVAL_LOG") or os.path.join(
     PATCHES_ROOT, "publish-interval-guard", "state", "publish_log.json"

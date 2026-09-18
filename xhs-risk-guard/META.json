@@ -1,0 +1,30 @@
+{
+  "name": "xhs-risk-guard",
+  "system": "shared",
+  "version": "1.3.0",
+  "patch_for": "red-book-skills",
+  "applies_to_main_version": ">=0.1.0",
+  "priority": 12,
+  "author": "Eric",
+  "created": "2026-09-12",
+  "dependencies": [],
+  "conflict_points": [
+    {
+      "with": "publish-loop-guard",
+      "description": "读取类 helper（read_note_body.py）的风控预算/熔断由本 patch 提供；publish-loop-guard 的 SKILL.md 只保留一句指向，不重复定义规则。",
+      "resolution": "read_note_body.py 运行时尝试 import 本 patch 的 risk_state；import 失败则降级为内置保守默认（25 篇 / 连续 3 次熔断）"
+    },
+    {
+      "with": "windows-sandbox-workaround",
+      "description": "登录域规则（登录态缓存 TTL 12h、401 落地 URL、TLS 假通、裸 socket 探活）的细节在该 patch；本 patch 只做汇总索引。",
+      "resolution": "规则细节以 windows-sandbox-workaround 为准，本 patch 的 B/D 两表为入口索引"
+    }
+  ],
+  "files": [
+    "SKILL.md",
+    "helpers/risk_state.py"
+  ],
+  "state_files": [
+    "state/risk_state.json"
+  ]
+}

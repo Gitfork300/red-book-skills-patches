@@ -24,6 +24,8 @@
   python check_window.py --start 2026-09-12 --live no  --public-signup no    # 不得发布
   python check_window.py --start 2026-09-18 --live yes --public-signup no    # 可发（有直播，须提示）
   python check_window.py --start 2026-10-12 --json
+  # 专题类（同一事件的系列预热/连载）窗口 15 天
+  python check_window.py --start 2026-09-22 --category series --live no --public-signup yes
 """
 
 import argparse
@@ -32,6 +34,8 @@ import json
 import sys
 
 WINDOW_DAYS = 7
+# 专题类（同一事件的系列预热/连载）窗口放宽到 15 天 —— 2026-09-14 用户口径
+WINDOW_DAYS_SERIES = 15
 
 
 def _parse(s):
@@ -76,11 +80,11 @@ def judge(start=None, end=None, deadline=None, today=None, window=WINDOW_DAYS,
 
     if deadline and deadline > limit:
         d = (deadline - today).days
-        return False, "TOO_EARLY", f"报名截止 {deadline}，距今 {d} 天，超出 7 天窗口", d
+        return False, "TOO_EARLY", f"报名截止 {deadline}，距今 {d} 天，超出 {window} 天窗口", d
 
     if start:
         d = (start - today).days
-        return False, "TOO_EARLY", f"开幕 {start}，距今 {d} 天，超出 7 天窗口", d
+        return False, "TOO_EARLY", f"开幕 {start}，距今 {d} 天，超出 {window} 天窗口", d
 
     return False, "NO_DATA", "未给出开幕日或报名截止日，无法判断", None
 
@@ -95,6 +99,26 @@ def judge_eligibility(live, public_signup):
             False, "NOT_ELIGIBLE",
             "既无线上直播，普通观众也无法自行报名（仅限邀约/特定从业者/闭门）",
             "读者既去不了也看不了 → 不写不发；如属远期可登记进待发池",
+        )
+    if public_signup == "invited":
+        # 2026-09-14 用户口径：邀请制也可以发，发的内容是已知展会成果和案例，需注明是邀请制
+        if live is True:
+            return (
+                True, "ELIGIBLE_LIVE",
+                "邀请制 + 有线上直播",
+                "文案必须写明直播信息（平台/时间/是否需预约），并注明本活动为邀请制",
+            )
+        if live is False:
+            return (
+                True, "ELIGIBLE_INVITE",
+                "邀请制，无直播；按 2026-09-14 用户口径可发布",
+                "⚠ 邀请制可发但内容口径不同：只写已公开的「成果与案例」，不要写成报名/参与引导；"
+                "正文必须明确注明邀请制（凭请柬入场 / 定向邀请 / 少量公众名额需审核）",
+            )
+        return (
+            False, "UNKNOWN",
+            "已声明邀请制，但未核实是否有线上直播",
+            "邀请制发布前仍需确认 --live yes/no；不确定按不可发布处理",
         )
     if live is True:
         return (
@@ -122,9 +146,11 @@ def judge_eligibility(live, public_signup):
 
 
 def _tri(v):
-    """yes→True / no→False / unknown|None→None"""
+    """yes→True / no→False / invited→'invited' / unknown|None→None"""
     if v is None or v == "unknown":
         return None
+    if v == "invited":
+        return "invited"
     return v == "yes"
 
 
@@ -135,12 +161,21 @@ def main():
     ap.add_argument("--deadline", help="报名截止日期 YYYY-MM-DD")
     ap.add_argument("--live", choices=["yes", "no", "unknown"],
                     help="是否有线上直播（展会/活动类必填）")
-    ap.add_argument("--public-signup", choices=["yes", "no", "unknown"],
-                    help="普通观众能否自行报名参与（展会/活动类必填）")
+    ap.add_argument("--public-signup", choices=["yes", "no", "unknown", "invited"],
+                    help="普通观众能否自行报名参与（展会/活动类必填）；"
+                         "invited = 邀请制（凭请柬/定向邀请/少量公众名额需审核），"
+                         "按 2026-09-14 口径可发，但只写已公开成果与案例且须注明邀请制")
     ap.add_argument("--today", help="基准日期，默认今天（测试用）")
-    ap.add_argument("--window", type=int, default=WINDOW_DAYS, help=f"窗口天数，默认 {WINDOW_DAYS}")
+    ap.add_argument("--window", type=int, default=None,
+                    help=f"窗口天数；不传时按 --category 决定（普通 {WINDOW_DAYS} / 专题 {WINDOW_DAYS_SERIES}）")
+    ap.add_argument("--category", choices=["normal", "series"], default="normal",
+                    help="normal = 单篇活动稿（7 天）；series = 同一事件的系列预热/连载专题（15 天）")
     ap.add_argument("--json", action="store_true", help="输出 JSON")
     a = ap.parse_args()
+
+    win = a.window if a.window is not None else (
+        WINDOW_DAYS_SERIES if a.category == "series" else WINDOW_DAYS
+    )
 
     need_eligibility = a.live is not None or a.public_signup is not None
     if not (a.start or a.deadline):
@@ -150,7 +185,7 @@ def main():
     start, end, deadline, today = (
         _parse(a.start), _parse(a.end), _parse(a.deadline), _parse(a.today),
     )
-    ok, verdict, detail, gap = judge(start, end, deadline, today, a.window)
+    ok, verdict, detail, gap = judge(start, end, deadline, today, win)
 
     elig_ok, elig_verdict, elig_detail, elig_hint = True, None, None, None
     if need_eligibility:
@@ -170,14 +205,16 @@ def main():
             "end": str(end) if end else None,
             "deadline": str(deadline) if deadline else None,
             "today": str(today or dt.date.today()),
-            "window_days": a.window,
+            "window_days": win,
+            "category": a.category,
         }, ensure_ascii=False, indent=2))
     else:
         mark = "PASS 可发布" if ok else "BLOCK 不得发布"
-        print(f"[{mark}] {verdict} — {detail}")
+        cat = "专题类(15天)" if a.category == "series" else "普通类(7天)"
+        print(f"[{mark}] {verdict} — {detail}　[窗口 {cat}]")
         if not ok and verdict == "TOO_EARLY":
             target = deadline or start
-            earliest = target - dt.timedelta(days=a.window)
+            earliest = target - dt.timedelta(days=win)
             kind = "报名截止" if deadline else "开幕"
             print(f"  建议：{kind}日 {target}，最早 {earliest} 起进入窗口，届时再写稿发布")
         if need_eligibility:
