@@ -31,14 +31,19 @@ Windows PowerShell：
 py -3 tools\ensure_compatible.py
 ```
 
+仓库和目录的固定位置见 [`UPDATE_LOCATIONS.md`](./UPDATE_LOCATIONS.md)。
+上游只能从 `aus666666/red-book-skills` 获取，Patch 从
+`Gitfork300/red-book-skills-patches` 获取。
+
 该命令会：
 
 1. 定位同级 `red-book-skills`（也可用 `RED_BOOK_SKILLS_ROOT` 指定）；
 2. 检查上游入口和执行脚本存在，并在 Git 仓库中确认来源；
-3. 拒绝直接改坏的覆盖层状态；
-4. 自动应用 `core-overrides`，自动备份原文件；
-5. 校验覆盖层和 33 项上游契约；
-6. 通过后输出唯一可调用的本体路径。
+3. 如果声明的依赖文件缺失，从本机 `red-book-skills-upstream/` 仅补回缺失文件；
+4. 拒绝直接改坏的覆盖层状态；
+5. 自动应用 `core-overrides`，自动备份原文件；
+6. 校验覆盖层和 33 项上游契约；
+7. 通过后输出唯一可调用的本体路径。
 
 任何一步失败都必须停止，不得绕过门禁直接调用上游脚本。
 

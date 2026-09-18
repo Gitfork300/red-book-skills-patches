@@ -7,6 +7,11 @@
 也不会随公开 Patch 仓库同步。Patch 仍通过 `core-overrides` 与上游 skill 衔接，
 不复制或拆分上游源码。
 
+仓库地址和更新位置以 [`UPDATE_LOCATIONS.md`](./UPDATE_LOCATIONS.md) 为准：
+上游是 `aus666666/red-book-skills`，Patch 是
+`Gitfork300/red-book-skills-patches`。不要使用不存在的
+`Gitfork300/red-book-skills` 作为抓取地址。
+
 ## Clone 后初始化
 
 在仓库根目录执行：
@@ -19,6 +24,10 @@ python tools/check_public_release.py
 
 `init_runtime.py` 只创建空目录，不创建业务数据、伪造登录态或写入凭据。各 helper
 首次需要写入状态时会自行创建对应 JSON 文件。
+
+如果上游运行目录缺少声明的依赖，`ensure_compatible.py` 会从本机
+`red-book-skills-upstream/` 仅恢复缺失文件后再继续门禁；也可使用
+`--upstream-backup <目录>` 指定备份位置。恢复不会覆盖已有文件。
 
 日常只加载根目录 `SKILL.md`（`red-book-skills-patch`）。`ensure_compatible.py`
 首次通过后，Patch 才会把同级 `red-book-skills` 作为执行本体使用；同一会话后续

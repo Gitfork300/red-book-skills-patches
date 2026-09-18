@@ -14,16 +14,20 @@
 
 ```powershell
 git clone https://github.com/aus666666/red-book-skills.git red-book-skills
-git clone <公开的-patch-仓库-url> red-book-skills-patches
+git clone https://github.com/Gitfork300/red-book-skills-patches.git red-book-skills-patches
 Set-Location red-book-skills-patches
 py -3 tools\init_runtime.py
 py -3 tools\ensure_compatible.py
 ```
 
+仓库地址、目录关系和缺失依赖恢复规则见
+[`UPDATE_LOCATIONS.md`](./UPDATE_LOCATIONS.md)。不要访问或创建
+`Gitfork300/red-book-skills`；它不是本项目的上游仓库。
+
 如果上游不在同级目录，可设置本机环境变量，或传入 `--main`：
 
 ```powershell
-$env:RED_BOOK_SKILLS_ROOT = 'D:\skills\red-book-skills'
+$env:RED_BOOK_SKILLS_ROOT = 'D:\skills\ned-book-skills'
 py -3 tools\ensure_compatible.py
 ```
 
@@ -51,3 +55,5 @@ py -3 tools\ensure_compatible.py
 - 上游源码仍由原作者仓库维护；Patch 只保存定制规则和覆盖层。
 - Cookie、账号配置、浏览器 Profile、日志、状态 JSON 不进入任一公开仓库。
 - `red-book-skills-upstream/` 只是本机检查备份，不属于安装内容。
+- 如果同级上游目录缺少已声明的依赖文件，`ensure_compatible.py` 会从
+  `red-book-skills-upstream/` 仅补回缺失文件；已有文件不会被覆盖。

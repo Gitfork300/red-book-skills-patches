@@ -4,6 +4,10 @@
 > 物理位置：`~/.workbuddy/skills/red-book-skills-patches/`
 > 目的：让所有定制化内容（用户偏好、平台适配、安全约束、运营规则）独立于主 skill 维护，主 skill 升级时不会丢，且可逐项审视。
 
+> **更新位置唯一说明**：仓库地址、运行目录、上游备份和缺失依赖恢复规则见
+> [`UPDATE_LOCATIONS.md`](./UPDATE_LOCATIONS.md)。上游只认
+> `aus666666/red-book-skills`，Patch 只认 `Gitfork300/red-book-skills-patches`。
+
 ## 设计原则
 
 - **本体与补丁分离**（2026-09-12 定）：**我们自己的更新放 patch，原始本体定期和 GitHub 同步**。

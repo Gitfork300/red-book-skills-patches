@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -20,9 +21,21 @@ for _stream in (sys.stdout, sys.stderr):
 
 PATCH_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MAIN = PATCH_ROOT.parent / "red-book-skills"
+DEFAULT_BACKUP = PATCH_ROOT / "red-book-skills-upstream"
 APPLY = PATCH_ROOT / "core-overrides" / "helpers" / "apply_overrides.py"
 POST_SYNC = PATCH_ROOT / "tools" / "post_sync_check.py"
 CACHE = PATCH_ROOT / "state" / "compatibility.json"
+UPSTREAM_REQUIRED = (
+    "SKILL.md",
+    "scripts",
+    "scripts/account_manager.py",
+    "scripts/cdp_publish.py",
+    "scripts/chrome_launcher.py",
+    "scripts/feed_explorer.py",
+    "scripts/image_downloader.py",
+    "scripts/publish_pipeline.py",
+    "scripts/run_lock.py",
+)
 
 
 def run(args: list[str], *, check: bool = False) -> subprocess.CompletedProcess[str]:
@@ -47,12 +60,40 @@ def resolve_main(explicit: str | None) -> Path:
     return Path(value).expanduser().resolve() if value else DEFAULT_MAIN.resolve()
 
 
+def resolve_backup(explicit: str | None) -> Path:
+    value = explicit or os.environ.get("RED_BOOK_SKILLS_UPSTREAM_BACKUP")
+    return Path(value).expanduser().resolve() if value else DEFAULT_BACKUP.resolve()
+
+
+def _is_upstream_root(root: Path) -> bool:
+    skill = root / "SKILL.md"
+    if not skill.is_file():
+        return False
+    return "name: red-book-skills" in skill.read_text(
+        encoding="utf-8", errors="replace"
+    )
+
+
+def restore_missing(main: Path, backup: Path) -> list[str]:
+    """Restore only missing declared dependencies from the local upstream snapshot."""
+    if not backup.is_dir() or not _is_upstream_root(backup):
+        return []
+    restored = []
+    for relative in UPSTREAM_REQUIRED:
+        source = backup / relative
+        target = main / relative
+        if target.exists() or not source.is_file():
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        restored.append(relative)
+    return restored
+
+
 def check_upstream_root(main: Path) -> str | None:
     if not main.is_dir():
         return f"找不到上游目录：{main}"
-    required = ("SKILL.md", "scripts", "scripts/cdp_publish.py",
-                "scripts/publish_pipeline.py", "scripts/chrome_launcher.py")
-    missing = [item for item in required if not (main / item).exists()]
+    missing = [item for item in UPSTREAM_REQUIRED if not (main / item).exists()]
     if missing:
         return f"上游目录不完整，缺少：{', '.join(missing)}"
     skill_text = (main / "SKILL.md").read_text(encoding="utf-8", errors="replace")
@@ -150,6 +191,10 @@ def apply_and_verify() -> tuple[bool, str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="启用 red-book-skills 的 Patch 安全兼容门面")
     parser.add_argument("--main", help="上游 red-book-skills 目录；默认使用同级目录")
+    parser.add_argument(
+        "--upstream-backup",
+        help="本地上游备份目录；默认使用同级 Patch 下的 red-book-skills-upstream",
+    )
     parser.add_argument("--refresh", action="store_true",
                         help="忽略本机兼容缓存并重新执行完整门禁")
     args = parser.parse_args()
@@ -157,6 +202,14 @@ def main() -> int:
     if not APPLY.exists() or not POST_SYNC.exists():
         return fail("Patch 文件不完整：缺少 core-overrides 或 post_sync_check")
     main_root = resolve_main(args.main)
+    backup_root = resolve_backup(args.upstream_backup)
+    if not main_root.is_dir():
+        return fail(f"找不到上游目录：{main_root}")
+    restored = restore_missing(main_root, backup_root)
+    if restored:
+        print(f"RESTORED 从本地上游备份补回 {len(restored)} 个缺失依赖：")
+        for relative in restored:
+            print(f"  - {relative}")
     for error in (check_upstream_root(main_root), check_source(main_root)):
         if error:
             return fail(error)
