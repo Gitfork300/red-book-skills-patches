@@ -70,12 +70,12 @@ export PATH="/c/Users/<user>/.workbuddy/binaries/PortableGit/versions/1.2.0/usr/
 
 ### 3. Read / Write / Glob 对含 `()` 的路径偶发失败
 
-本机用户名 `EricSupport(DMSH)`（含括号）：`Write` 会 `EPERM` 且路径截断在括号处；`Read`/`Glob` 偶发假报"不存在"（同一路径稍后正常）。做法：原样重试一次，仍败换通道：
+用户名或路径中包含括号时，`Write` 可能报 `EPERM` 并截断路径；`Read`/`Glob` 也可能暂时报"不存在"。做法：原样重试一次，仍败换通道：
 
 | 通道 | 用法 |
 |---|---|
 | Bash heredoc | `cat > 目标 << 'PYEOF' … PYEOF` |
-| 公共目录中转 | 写到无括号的 `C:\Users\Public\x.py`，执行完删除 |
+| 临时目录中转 | 写到无括号的 `%TEMP%\x.py`，执行完删除 |
 | PowerShell | `[System.IO.File]::WriteAllText`（stdout 不回传，落盘再读） |
 
 ## 三、对外网络可达性（TLS 握手才算数）

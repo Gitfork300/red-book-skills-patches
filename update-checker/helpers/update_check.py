@@ -1,4 +1,4 @@
-"""原仓库更新检查 —— 定期检查 aus666666/red-book-skills 是否有新提交。
+"""上游更新检查 —— 定期检查 Gitfork300/xiaohongshu-skills-A2 是否有新提交。
 
 为什么独立成脚本：
   - agent 不主动检查；必须定时跑
@@ -9,14 +9,15 @@
 用法：
   check                   若距上次检查 >= 间隔则执行；否则直接 exit 0
   check-now               强制立即检查（忽略间隔）
+  check                   版本未变时只探测 pyproject.toml，不查询 commit
   status                  打印 state/update_state.json 的可读摘要
-  diff-local              下载上游快照，逐文件对比本地 skill（忽略行尾/BOM）
+  diff-local              下载上游快照，逐文件对比 bundled runtime（忽略行尾/BOM）
   set-interval <秒>       调整检查间隔（默认 604800 = 7 天）
   acknowledge --sha SHA   标记某 commit 已读，避免重复提醒
 
 为什么需要 diff-local：
   只比 commit sha 无法回答"这次上游改动会不会砸到我的本地定制"。
-  本地 red-book-skills 是拷贝安装（无 .git），且带若干本地增强，
+  bundled runtime 随 Patch 仓库分发，且与 A2 目录结构不同；
   订阅 sha 只能告诉你"上游动了"，不能告诉你"动了哪里"。
   diff-local 拉上游 tarball 做内容级比对，并按行尾归一化消除
   Windows CRLF 与上游 LF 造成的满屏假阳性。
@@ -25,6 +26,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -39,24 +41,24 @@ PATCH_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__fil
 STATE_DIR = os.path.join(PATCH_ROOT, "state")
 STATE_FILE = os.path.join(STATE_DIR, "update_state.json")
 
-# PATCH_ROOT 是本 patch 自己的目录：.../skills/red-book-skills-patches/update-checker
-# 主 skill 与 patches 目录同级：上一级是 red-book-skills-patches，再上一级才是 skills
-LOCAL_SKILL = os.path.normpath(os.path.join(PATCH_ROOT, "..", "..", "red-book-skills"))
+# A2 是更新评估来源；当前独立 runtime 随仓库分发。
+LOCAL_SKILL = os.path.normpath(os.path.join(PATCH_ROOT, "..", "runtime"))
 
-REPO = "aus666666/red-book-skills"
+REPO = "Gitfork300/xiaohongshu-skills-A2"
 GITHUB_API = "https://api.github.com"
+UPSTREAM_VERSION_URL = f"https://raw.githubusercontent.com/{REPO}/main/pyproject.toml"
 GIT_LS_REMOTE = f"https://github.com/{REPO}.git"
 DEFAULT_INTERVAL = 7 * 24 * 3600
 NOTIFY_COOLDOWN = 24 * 3600  # 同 sha 提醒冷却
 
-USER_AGENT = "xhs-update-checker/1.1"
+USER_AGENT = "xhs-update-checker/1.4"
 
 # 对比时跳过的目录：运行时产物，不属于 skill 源码，比了只会刷屏
 DIFF_SKIP_DIRS = {".git", ".venv", "venv", "__pycache__", "tmp", ".pytest_cache", "node_modules"}
 
 ENDPOINTS = [
     f"{GITHUB_API}/repos/{REPO}/commits?per_page=1",
-    f"{GITHUB_API}/repos/{REPO}/commits?per_page=1&sha=master",
+    f"{GITHUB_API}/repos/{REPO}/commits?per_page=1&sha=main",
 ]
 
 
@@ -78,6 +80,8 @@ def _load_state():
             "last_check_epoch": 0,
             "last_check_iso": None,
             "last_check_status": None,
+            "last_known_version": None,
+            "upstream_version_etag": None,
             "last_known_sha": None,
             "last_known_iso": None,
             "last_known_message": None,
@@ -102,7 +106,7 @@ def _save_state(d):
 
 
 def _http_get_json(url, timeout=10):
-    req = urllib.request.Request(url, headers={"User-Agent": "xhs-update-checker/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         if r.status == 403:
             raise RuntimeError("rate_limited")
@@ -127,6 +131,47 @@ def _git_ls_remote():
         return None
     sha = line[0].split()[0]
     return {"sha": sha, "iso": None, "message": "(via git ls-remote, no timestamp)"}
+
+
+def _parse_upstream_version(pyproject_text):
+    """Read project.version from the upstream pyproject.toml."""
+    project = re.search(
+        r"(?ms)^\[project\]\s*(.*?)(?=^\[|\Z)",
+        pyproject_text,
+    )
+    if not project:
+        raise RuntimeError("upstream pyproject.toml has no [project] section")
+    version = re.search(
+        r"""(?m)^\s*version\s*=\s*["']([^"']+)["']\s*(?:#.*)?$""",
+        project.group(1),
+    )
+    if not version:
+        raise RuntimeError("upstream pyproject.toml has no project.version")
+    return version.group(1)
+
+
+def fetch_upstream_version(state):
+    """Fetch the lightweight release marker, using ETag when available."""
+    headers = {"User-Agent": USER_AGENT}
+    etag = state.get("upstream_version_etag")
+    if etag:
+        headers["If-None-Match"] = etag
+    req = urllib.request.Request(UPSTREAM_VERSION_URL, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            text = response.read().decode("utf-8", errors="replace")
+            version = _parse_upstream_version(text)
+            return {
+                "version": version,
+                "etag": response.headers.get("ETag"),
+            }
+    except urllib.error.HTTPError as error:
+        if error.code == 304 and state.get("last_known_version"):
+            return {
+                "version": state["last_known_version"],
+                "etag": etag,
+            }
+        raise
 
 
 def fetch_latest():
@@ -166,7 +211,36 @@ def cmd_check(args):
 
 
 def _do_check(state):
-    print("=== 检查原仓库最新 commit ===", flush=True)
+    print("=== 检查可信 Fork 版本 ===", flush=True)
+    try:
+        version_info = fetch_upstream_version(state)
+    except (urllib.error.URLError, OSError, RuntimeError) as e:
+        msg = str(e)
+        status = "network_error"
+        state.update({
+            "last_check_epoch": _now(),
+            "last_check_iso": _iso(_now()),
+            "last_check_status": status,
+        })
+        _save_state(state)
+        print(f"!! 检查失败：{status}（{msg}）")
+        return 2
+
+    version = version_info["version"]
+    known_version = state.get("last_known_version")
+    if known_version == version:
+        state.update({
+            "last_check_epoch": _now(),
+            "last_check_iso": _iso(_now()),
+            "last_check_status": "ok",
+            "upstream_version_etag": version_info.get("etag"),
+        })
+        _save_state(state)
+        print(f"上游版本未变：{version}；跳过 commit 查询")
+        return 0
+
+    print(f"上游版本变化：{known_version or '(无记录)'} → {version}")
+    print("=== 检查可信 Fork 最新 commit ===", flush=True)
     try:
         latest = fetch_latest()
     except RuntimeError as e:
@@ -190,6 +264,8 @@ def _do_check(state):
         "last_check_epoch": _now(),
         "last_check_iso": _iso(_now()),
         "last_check_status": "ok",
+        "last_known_version": version,
+        "upstream_version_etag": version_info.get("etag"),
         "last_known_sha": sha,
         "last_known_iso": iso,
         "last_known_message": msg,
@@ -216,7 +292,8 @@ def _do_check(state):
         return 0
 
     print("=== UPDATE_AVAILABLE ===", flush=True)
-    print(f"原仓库: {REPO}")
+    print(f"可信 Fork: {REPO}")
+    print(f"  上游版本: {version}")
     print(f"  新 commit: {sha}")
     print(f"  时间    : {iso}")
     print(f"  标题    : {msg}")
@@ -295,10 +372,11 @@ def _sha_norm(path):
 def _check_overrides(up_root):
     """对照 core-overrides/baseline.json，检测上游是否也改动了被我们覆盖的文件。
 
-    返回 None（无覆盖层）或 (unchanged, conflict, missing)：
+    返回 None（无覆盖层）或 (unchanged, conflict, missing, unmapped)：
       unchanged 上游未动的被覆盖文件
       conflict  [(rel, baseline_sha, upstream_sha)] 双方都改了 —— 直接覆盖会丢上游改动
-      missing   上游已无此文件
+      missing   上游已无此文件，且基线未声明其本来就不存在
+      unmapped  本地覆盖文件没有可做哈希比较的一对一上游路径
     """
     bl = os.path.normpath(
         os.path.join(PATCH_ROOT, "..", "core-overrides", "baseline.json")
@@ -311,19 +389,44 @@ def _check_overrides(up_root):
     except Exception:
         return None
 
-    unchanged, conflict, missing = [], [], []
+    unchanged, conflict, missing, unmapped = [], [], [], []
     for rel, meta in (data.get("files") or {}).items():
+        mapped = meta.get("mapped_upstream")
+        if isinstance(mapped, dict) and mapped:
+            changed = []
+            for upstream_rel, baseline_sha in mapped.items():
+                upstream_path = os.path.join(up_root, upstream_rel)
+                if not os.path.exists(upstream_path):
+                    changed.append((upstream_rel, baseline_sha, "(missing)"))
+                    continue
+                now_sha = _sha_norm(upstream_path)
+                if now_sha != baseline_sha:
+                    changed.append((upstream_rel, baseline_sha, now_sha))
+            if changed:
+                conflict.append((rel, changed, "mapped"))
+            else:
+                unchanged.append(rel)
+            continue
+
         base_sha = meta.get("upstream_sha256")
         cur = os.path.join(up_root, rel)
         if not os.path.exists(cur):
-            missing.append(rel)
+            if meta.get("upstream_absent"):
+                unchanged.append(rel)
+            else:
+                missing.append(rel)
+            continue
+        if meta.get("upstream_absent"):
+            conflict.append((rel, "(absent at baseline)", _sha_norm(cur)))
             continue
         now_sha = _sha_norm(cur)
         if base_sha and now_sha == base_sha:
             unchanged.append(rel)
+        elif not base_sha:
+            unmapped.append((rel, meta.get("mapping_note", "no comparable upstream path")))
         else:
-            conflict.append((rel, base_sha or "(未记录)", now_sha))
-    return unchanged, conflict, missing
+            conflict.append((rel, base_sha, now_sha))
+    return unchanged, conflict, missing, unmapped
 
 
 def cmd_diff_local(args):
@@ -364,6 +467,7 @@ def cmd_diff_local(args):
         }
         if ov:
             result["overrides_conflict"] = [c[0] for c in ov[1]]
+            result["overrides_unmapped"] = [item[0] for item in ov[3]]
 
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -385,18 +489,24 @@ def cmd_diff_local(args):
             print()
 
             if ov:
-                unchanged, conflict, missing = ov
+                unchanged, conflict, missing, unmapped = ov
                 print("=== 覆盖层冲突检查（core-overrides/baseline.json）===")
                 if conflict:
                     print(f"  !! 上游改动了 {len(conflict)} 个被我们覆盖的文件 —— 直接覆盖会丢上游改动：")
                     for rel, b, c in conflict:
                         print(f"     {rel}")
-                        print(f"       基线={b[:12]}   上游当前={c[:12]}")
+                        if c == "mapped":
+                            for upstream_rel, old_hash, new_hash in b:
+                                print(f"       {upstream_rel}: 基线={old_hash[:12]}   上游当前={new_hash[:12]}")
+                        else:
+                            print(f"       基线={b[:12]}   上游当前={c[:12]}")
                     print("     处置：把上游改动人工合并进 core-overrides/overrides/ 后再 apply")
                 else:
                     print(f"  OK 被覆盖的 {len(unchanged)} 个文件上游均未改动，覆盖层安全")
                 for rel in missing:
                     print(f"  ?? 上游已无此文件：{rel}（可能被重构删除/改名）")
+                for rel, note in unmapped:
+                    print(f"  -- 无一对一上游路径，未作哈希冲突判断：{rel}（{note}）")
                 print()
 
             if not (diff or only_up):
@@ -417,6 +527,7 @@ def cmd_status(args):
     print(f"  interval     : {state.get('interval_sec', DEFAULT_INTERVAL)}s ({(state.get('interval_sec', DEFAULT_INTERVAL) or DEFAULT_INTERVAL) // 86400} 天)")
     print(f"  last_check   : {state.get('last_check_iso') or '(never)'}")
     print(f"  status       : {state.get('last_check_status') or '(unknown)'}")
+    print(f"  last_version : {state.get('last_known_version') or '(unknown)'}")
     print(f"  last_known   : {state.get('last_known_sha') or '(unknown)'}")
     if state.get("last_known_iso"):
         print(f"                 @ {state['last_known_iso']}")
@@ -457,7 +568,7 @@ def main():
     p.add_argument("seconds", nargs="?", type=int,
                    help="(set-interval 用) 间隔秒数")
     p.add_argument("--sha", help="(acknowledge 用) 标记的 commit sha")
-    p.add_argument("--local", help="(diff-local 用) 指定本地 skill 目录，默认同级 red-book-skills")
+    p.add_argument("--local", help="(diff-local 用) 指定本地运行目录，默认 bundled runtime")
     p.add_argument("--json", action="store_true", help="(diff-local 用) 输出 JSON")
     args = p.parse_args()
 

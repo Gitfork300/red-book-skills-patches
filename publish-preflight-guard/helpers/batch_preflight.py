@@ -3,7 +3,7 @@ r"""批次发布前总检查 —— 一次跑完 publish-preflight-guard 的可�
 
 为什么需要它
 ------------
-`publish-preflight-guard` 的 17 项检查里，有 11 项是可自动化的（1/2/3/4/8/9/11/14/15/16/17），
+`publish-preflight-guard` 的 19 项检查里，有 12 项是可自动化的（1/2/3/4/8/9/10/11/14/15/16/17），
 但每开一个新批次都要现写一遍胶水脚本 —— 2026-09-12 ai0912 批次就是这么干的。
 把它固化下来，此后一条命令跑完，人工只判剩下的 6 项。
 
@@ -20,6 +20,7 @@ r"""批次发布前总检查 —— 一次跑完 publish-preflight-guard 的可�
           "end": "2026-09-20",
           "live": false,                      # 必填，第 4 项资格
           "public_signup": true,
+          "non_activity": false,              # 非活动类（技术前沿/天气/Canary）设 true
           "class": "a",                       # 可选，第 1 项查重窗口：a|industry|other
           "title": "…",                       # 必填，可用 title_file 代替
           "content": "…",                     # 必填，可用 content_file 代替
@@ -28,12 +29,18 @@ r"""批次发布前总检查 —— 一次跑完 publish-preflight-guard 的可�
       ]
     }
 
+`title_file`、`content_file` 和 `cover` 的相对路径均以**当前工作目录**为基准；
+建议使用绝对路径或从路径所依据的目录启动。标题/正文文件缺失或为空会报错退出，
+不会用空文本继续预检。非活动类每篇需设 `"non_activity": true`，以跳过会展地域、
+时效/资格闸门，并在正文使用「阅读门槛 / 适合人群 / 专业性 / 信息量级」评级维度。
+
 用法
 ----
     python batch_preflight.py --notes xhs_publish/ai0912_notes.json
     python batch_preflight.py --notes … --default-class industry   # 未标 class 的按此归类
     python batch_preflight.py --notes … --order file               # 按 JSON 顺序，不按优先级
-    python batch_preflight.py --notes … --only 1,2,3               # 只跑部分条目
+    python batch_preflight.py --notes … --only 1,8,9               # 只跑指定「检查项」
+    python batch_preflight.py --notes … --only-notes 1,3,5         # 只检查指定「稿件」
 
 退出码：0 = 自动化条目全过 / 1 = 有未通过 / 2 = 参数或环境错误
 
@@ -90,6 +97,8 @@ LEVEL_ORDER = ("红色", "黑色", "橙色", "黄色", "蓝色")
 
 # 第 17 项：底部评级块（展会/活动类必带）
 RATING_FIELDS = ("参与难度", "适合人群", "专业性", "活动规模", "来源：")
+# 第 17 项适配版：技术前沿（非活动类）用「阅读门槛 / 信息量级」替换「参与难度 / 活动规模」
+RATING_FIELDS_ADAPTED = ("阅读门槛", "适合人群", "专业性", "信息量级", "来源：")
 # 首行必须是「综合 ★…」——汉字在前、星级在后（2026-09-14 用户口径，不能写成「★… 综合」）
 OVERALL_RE = re.compile(r"^综合\s*[★☆]", re.M)
 
@@ -115,11 +124,27 @@ def split_core(content):
 
 def run(args, timeout=180):
     try:
+        # 2026-10-03：args 可能混入 bool/None（JSON 里的 live / public_signup 写 true/false），
+        # subprocess 只吃 str/bytes/PathLike，否则抛 TypeError 被下面 except 吞成 "exit=99"，
+        # 整批第 3/4 项误报 FAIL。此处统一归一化后再交给子进程。
+        args = [_s(a) for a in args]
         r = subprocess.run(args, capture_output=True, text=True,
                            encoding="utf-8", errors="replace", timeout=timeout)
         return r.returncode, (r.stdout or "") + (r.stderr or "")
     except Exception as e:
         return 99, f"(执行失败: {e})"
+
+
+def _s(v):
+    """把任意标量转成子进程可接受的命令行字符串。
+
+    bool True/False → yes/no（check_window 的口径）；None → unknown；其余原样 str()。
+    """
+    if v is None:
+        return "unknown"
+    if isinstance(v, bool):
+        return "yes" if v else "no"
+    return str(v)
 
 
 def tail(text, n=3):
@@ -128,13 +153,29 @@ def tail(text, n=3):
 
 def field(note, key):
     """取 title/content：支持内联或 *_file 两种写法。"""
-    if note.get(key):
-        return note[key]
+    value = note.get(key)
+    if value is not None:
+        if not isinstance(value, str):
+            raise ValueError(f"{key} 必须是文本")
+        if value.strip():
+            return value
     p = note.get(key + "_file")
-    if p and os.path.exists(p):
+    if p:
+        if not isinstance(p, str):
+            raise ValueError(f"{key}_file 必须是路径文本")
+        if not os.path.isfile(p):
+            raise FileNotFoundError(
+                f"{key}_file 不存在或不是文件：{p} "
+                f"（相对路径按当前工作目录解析：{os.getcwd()}）"
+            )
         with open(p, encoding="utf-8") as f:
-            return f.read()
-    return ""
+            value = f.read()
+        if value.strip():
+            return value
+        raise ValueError(f"{key}_file 内容为空：{p}")
+    raise ValueError(
+        f"稿件 {note.get('key') or '<未命名>'} 缺少 {key} 或 {key}_file"
+    )
 
 
 def main():
@@ -144,7 +185,8 @@ def main():
                     choices=["a", "industry", "other"], help="未标 class 的稿件按此归类（默认 other，最保守）")
     ap.add_argument("--order", default="priority", choices=["priority", "file"],
                     help="检查/发布顺序：priority=A类>行业类>其他；file=按 JSON 原序")
-    ap.add_argument("--only", help="只跑指定条目序号（1 基，逗号分隔），如 1,3,5")
+    ap.add_argument("--only", help="只跑指定**检查项**（19 项表里的编号，逗号分隔），如 1,8,9")
+    ap.add_argument("--only-notes", help="只检查指定**稿件**（1 基，逗号分隔），如 1,3,5")
     ap.add_argument("--tmpdir", help="标题/正文落盘目录，默认 <notes 同目录>/tmp_check")
     args = ap.parse_args()
 
@@ -158,15 +200,34 @@ def main():
         print("稿件 JSON 里没有 notes[]", file=sys.stderr)
         return 2
 
-    for n in notes:
+    for index, n in enumerate(notes, 1):
+        if not isinstance(n, dict):
+            print(f"第 {index} 篇稿件必须是 JSON 对象", file=sys.stderr)
+            return 2
+        try:
+            n["_title_text"] = field(n, "title")
+            n["_content_text"] = field(n, "content")
+        except (OSError, ValueError) as error:
+            print(f"稿件输入无效（第 {index} 篇，{n.get('key') or '<未命名>'}）：{error}",
+                  file=sys.stderr)
+            return 2
         n["_class"] = n.get("class") or args.default_class
 
     if args.order == "priority":
         notes.sort(key=lambda n: CLASS_ORDER.get(n["_class"], 9))
 
-    if args.only:
-        want = {int(x) for x in re.split(r"[,\s]+", args.only) if x.strip().isdigit()}
+    # --only-notes 按稿件序号过滤；--only 按检查项编号过滤（2026-10-03 修正）
+    if args.only_notes:
+        want = {int(x) for x in re.split(r"[,\s]+", args.only_notes) if x.strip().isdigit()}
         notes = [n for i, n in enumerate(notes, 1) if i in want]
+    CHECKS = None
+    if args.only:
+        CHECKS = {int(x) for x in re.split(r"[,\s]+", args.only) if x.strip().isdigit()}
+        print(f"只跑检查项：{sorted(CHECKS)}")
+
+    def want(*nums):
+        """是否跑某个检查项（nums 为其覆盖的编号，如 8 和 9 同属一次 subprocess 调用）。"""
+        return CHECKS is None or any(x in CHECKS for x in nums)
 
     tmp = args.tmpdir or os.path.join(os.path.dirname(os.path.abspath(args.notes)), "tmp_check")
     os.makedirs(tmp, exist_ok=True)
@@ -180,12 +241,14 @@ def main():
     fails = []
     for i, n in enumerate(notes, 1):
         key, cls = n.get("key", f"#{i}"), n["_class"]
-        title, content = field(n, "title").strip(), field(n, "content")
+        title, content = n["_title_text"].strip(), n["_content_text"]
         print(f"\n{'-' * 78}")
         print(f"[{i}/{len(notes)}] {key}  ({'A 类' if cls == 'a' else '行业类' if cls == 'industry' else '其他'})"
               f"  {n.get('name', '')}")
         print(f"{'-' * 78}")
         print(f"  标题: {title}")
+        # 检查项被 --only 跳过时，下游的 if rc != 0 / if not ok 不应炸 NameError
+        rc, out, ok = 0, "", True
 
         tp = os.path.join(tmp, f"{key}_title.txt")
         cp = os.path.join(tmp, f"{key}_content.txt")
@@ -195,60 +258,89 @@ def main():
             f.write(content)
 
         # 1) 选题查重（类别化窗口）
-        rc, out = run([PY, DUP, "--title", title, "--class", cls])
-        print(f"  [1]  查重(--class {cls})".ljust(38) + f"exit={rc} {'OK' if rc == 0 else '!! FAIL'}")
+        if not want(1):
+            print("  [1]  查重".ljust(38) + "SKIP")
+        else:
+            rc, out = run([PY, DUP, "--title", title, "--class", cls])
+            print(f"  [1]  查重(--class {cls})".ljust(38) + f"exit={rc} {'OK' if rc == 0 else '!! FAIL'}")
         for l in tail(out, 3):
             print("       " + l)
         if rc != 0:
             fails.append((key, 1, "查重"))
 
         # 2) 地域范围
-        rc, out = run([PY, GEO, "--city", n.get("city", "")])
-        print(f"  [2]  地域 {n.get('city', '?')}".ljust(38) + f"exit={rc} {'OK' if rc == 0 else '!! FAIL'}")
-        for l in tail(out, 2):
-            print("       " + l)
-        if rc != 0:
-            fails.append((key, 2, "地域"))
+        #    非活动类（技术前沿 / 天气）不适用会展三闸门（地域/时效/主办资格）——
+        #    skill 明文口径；稿件用 non_activity=true 声明，此处显式 SKIP 而非假装通过。
+        if not want(2):
+            print("  [2]  地域".ljust(38) + "SKIP")
+        elif n.get("non_activity"):
+            print("  [2]  地域（非活动类·闸门不适用）".ljust(38) + "SKIP")
+            rc = 0
+        else:
+            rc, out = run([PY, GEO, "--city", n.get("city", "")])
+            print(f"  [2]  地域 {n.get('city', '?')}".ljust(38) + f"exit={rc} {'OK' if rc == 0 else '!! FAIL'}")
+            for l in tail(out, 2):
+                print("       " + l)
+            if rc != 0:
+                fails.append((key, 2, "地域"))
 
-        # 3+4) 时效窗口 + 可发布资格
-        rc, out = run([PY, WIN, "--start", n.get("start", ""), "--end", n.get("end", ""),
-                       "--live", "yes" if n.get("live") else "no",
-                       "--public-signup", "yes" if n.get("public_signup") else "no"])
-        ok = rc in (0, 3)
-        print("  [3/4] 时效+资格".ljust(38) + f"exit={rc} {'OK' if ok else '!! FAIL'}"
-              f"  (start={n.get('start')} end={n.get('end')}"
-              f" live={n.get('live')} signup={n.get('public_signup')})")
-        for l in tail(out, 3):
-            print("       " + l)
-        if not ok:
-            fails.append((key, 3, "时效/资格"))
+        # 3+4) 时效窗口 + 可发布资格（同上：非活动类不适用）
+        if not want(3, 4):
+            print("  [3/4] 时效+资格".ljust(38) + "SKIP")
+        elif n.get("non_activity"):
+            print("  [3/4] 时效+资格（非活动类·闸门不适用）".ljust(38) + "SKIP")
+        else:
+            rc, out = run([PY, WIN, "--start", n.get("start", ""), "--end", n.get("end", ""),
+                           "--deadline", n.get("deadline", ""),
+                           "--category", n.get("category", "normal"),
+                           "--live", "yes" if n.get("live") else ("unknown" if n.get("live") is None else "no"),
+                           "--public-signup", n.get("public_signup", "unknown")])
+            # 退出码口径（check_window.main 末段）：0=全通过 / 1=时效 BLOCK / 3=**资格 BLOCK**。
+            # 旧写法 `rc in (0, 3)` 把「资格不通过 / 资格未核实 UNKNOWN」当成 OK，
+            # 2026-10-03 修 —— 与 judge_eligibility 一致，UNKNOWN 也必须阻断。
+            ok = rc == 0
+            print("  [3/4] 时效+资格".ljust(38) + f"exit={rc} {'OK' if ok else '!! FAIL'}"
+                  f"  (start={n.get('start')} end={n.get('end')}"
+                  f" live={n.get('live')} signup={n.get('public_signup')})")
+            for l in tail(out, 3):
+                print("       " + l)
+            if not ok:
+                fails.append((key, 3, "时效/资格"))
 
         # 8+9) 用词预检 + 字数
-        rc, out = run([PY, WORD, "--title", title, "--file", cp])
-        print("  [8/9] 用词+字数".ljust(38) + f"exit={rc} {'OK' if rc == 0 else '!! FAIL'}")
-        for l in tail(out, 6):
-            print("       " + l)
-        if rc != 0:
-            fails.append((key, 8, "用词/字数"))
+        if not want(8):
+            print("  [8]   用词".ljust(38) + "SKIP")
+        else:
+            rc, out = run([PY, WORD, "--title", title, "--file", cp])
+            print("  [8]   用词".ljust(38) + f"exit={rc} {'OK' if rc == 0 else '!! FAIL'}")
+            for l in tail(out, 6):
+                print("       " + l)
+            if rc != 0:
+                fails.append((key, 8, "用词"))
 
         # 9) 字数闸门：核心正文 200-600 + 全篇 <1000（2026-09-14 用户口径）
-        core, _extra = split_core(content)
-        n_core, n_total = len(core.strip()), len(content.strip())
-        why = []
-        if not (CORE_MIN <= n_core <= CORE_MAX):
-            why.append(f"核心正文 {n_core} 字 越界（{CORE_MIN}-{CORE_MAX}）")
-        if n_total >= TOTAL_MAX:
-            why.append(f"全篇 {n_total} 字 ≥ {TOTAL_MAX}")
-        print("  [9]  字数".ljust(38)
-              + f"核心 {n_core}(200-600) / 全篇 {n_total}(<1000)"
-              + ("  OK" if not why else "  !! FAIL"))
-        if why:
-            print("       " + "；".join(why))
-            fails.append((key, 9, "字数"))
+        if not want(9):
+            print("  [9]  字数".ljust(38) + "SKIP")
+        else:
+            core, _extra = split_core(content)
+            n_core, n_total = len(core.strip()), len(content.strip())
+            why = []
+            if not (CORE_MIN <= n_core <= CORE_MAX):
+                why.append(f"核心正文 {n_core} 字 越界（{CORE_MIN}-{CORE_MAX}）")
+            if n_total >= TOTAL_MAX:
+                why.append(f"全篇 {n_total} 字 ≥ {TOTAL_MAX}")
+            print("  [9]  字数".ljust(38)
+                  + f"核心 {n_core}(200-600) / 全篇 {n_total}(<1000)"
+                  + ("  OK" if not why else "  !! FAIL"))
+            if why:
+                print("       " + "；".join(why))
+                fails.append((key, 9, "字数"))
 
         # 11) 封面文件核对（存在性 + 尺寸）
         cov = n.get("cover") or ""
-        if cov and os.path.exists(cov):
+        if not want(11):
+            print("  [11] 封面".ljust(38) + "SKIP")
+        elif cov and os.path.exists(cov):
             kb = os.path.getsize(cov) // 1024
             dim = ""
             try:
@@ -264,32 +356,43 @@ def main():
             fails.append((key, 11, "封面缺失"))
 
         # 16) 主办资质闸门（仅活动类；非活动类自动跳过；exit 1=硬拒 2=复核）
-        rc, out = run([PY, ORG, "--title", title, "--file", cp])
-        tag = "OK" if rc == 0 else ("⚠复核" if rc == 2 else "!! FAIL")
-        print("  [16] 主办资质".ljust(38) + f"exit={rc} {tag}")
-        for l in tail(out, 4):
-            print("       " + l)
-        if rc == 1:
-            fails.append((key, 16, "主办资质"))
+        if not want(16):
+            print("  [16] 主办资质".ljust(38) + "SKIP")
+        else:
+            rc, out = run([PY, ORG, "--title", title, "--file", cp])
+            tag = "OK" if rc == 0 else ("⚠复核" if rc == 2 else "!! FAIL")
+            print("  [16] 主办资质".ljust(38) + f"exit={rc} {tag}")
+            for l in tail(out, 4):
+                print("       " + l)
+            if rc == 1:
+                fails.append((key, 16, "主办资质"))
 
         # 17) 底部评级块（展会/活动类必带；首行「综合 ★…」汉字在前）
-        miss = [f for f in RATING_FIELDS if f not in content]
-        if miss:
-            print("  [17] 底部评级块".ljust(38) + f"!! FAIL  缺字段：{'、'.join(miss)}")
-            fails.append((key, 17, "评级块缺字段"))
-        elif not OVERALL_RE.search(content):
-            print("  [17] 底部评级块".ljust(38)
-                  + "!! FAIL  缺首行「综合 ★…」（汉字在前，不能是「★… 综合」）")
-            fails.append((key, 17, "评级块首行顺序/缺失"))
+        #     技术前沿类用适配四维：阅读门槛 / 适合人群 / 专业性 / 信息量级
+        #     （用户 2026-09-16 口径：话题 C 的评级块按适配维度校验）
+        if want(17):
+            if n.get("non_activity") and ("阅读门槛" in content or "信息量级" in content):
+                miss = [f for f in RATING_FIELDS_ADAPTED if f not in content]
+            else:
+                miss = [f for f in RATING_FIELDS if f not in content]
+            if miss:
+                print("  [17] 底部评级块".ljust(38) + f"!! FAIL  缺字段：{'、'.join(miss)}")
+                fails.append((key, 17, "评级块缺字段"))
+            elif not OVERALL_RE.search(content):
+                print("  [17] 底部评级块".ljust(38)
+                      + "!! FAIL  缺首行「综合 ★…」（汉字在前，不能是「★… 综合」）")
+                fails.append((key, 17, "评级块首行顺序/缺失"))
+            else:
+                print("  [17] 底部评级块".ljust(38) + "OK  首行「综合 ★…」+ 四维 + 来源")
         else:
-            print("  [17] 底部评级块".ljust(38) + "OK  首行「综合 ★…」+ 四维 + 来源")
+            print("  [17] 底部评级块".ljust(38) + "SKIP")
 
     # 14) 选题配额 —— 仅当本批含恶劣天气类选题时适用
     #    红/黑预警放宽到 3 篇：从稿件文本嗅探级别并透传给 --level（查不到即按 1 篇拦）
     hit = []
     level = None
     for n in notes:
-        text = field(n, "title") + field(n, "content")
+        text = n["_title_text"] + n["_content_text"]
         if not any(w in text for w in WEATHER_KW):
             continue
         hit.append(n.get("key"))
@@ -299,7 +402,9 @@ def main():
                     level = lv
                     break
     print(f"\n{'=' * 78}")
-    if hit:
+    if not want(14):
+        print("  [14] 恶劣天气类配额".ljust(38) + "SKIP")
+    elif hit:
         cmd = [PY, QUOTA, "--kind", "weather"]
         if level:
             cmd += ["--level", level]
@@ -314,12 +419,15 @@ def main():
         print("  [14] 恶劣天气类配额".ljust(38) + "不适用（本批无天气影响类选题）")
 
     # 15) 网络可达性（必须真 TLS 握手）
-    rc, out = run([PY, NET])
-    print("  [15] 网络可达性(TLS)".ljust(38) + f"exit={rc} {'OK' if rc == 0 else '!! FAIL'}")
-    for l in tail(out, 4):
-        print("       " + l)
-    if rc != 0:
-        fails.append(("GLOBAL", 15, "网络"))
+    if not want(15):
+        print("  [15] 网络可达性(TLS)".ljust(38) + "SKIP")
+    else:
+        rc, out = run([PY, NET])
+        print("  [15] 网络可达性(TLS)".ljust(38) + f"exit={rc} {'OK' if rc == 0 else '!! FAIL'}")
+        for l in tail(out, 4):
+            print("       " + l)
+        if rc != 0:
+            fails.append(("GLOBAL", 15, "网络"))
 
     print(f"\n{'=' * 78}")
     if fails:

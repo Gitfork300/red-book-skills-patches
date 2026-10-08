@@ -1,73 +1,62 @@
 ---
 name: red-book-skills-patch
 description: |
-  red-book-skills 的安全兼容门面。日常调用必须先通过本 Patch 的安装、
-  上游来源、覆盖层和契约检查，再委托给同级安装的 red-book-skills。
+  独立运行的小红书发布与运营 skill。内置 Windows 兼容执行脚本、质量门禁和本地规则；
+  A2 Fork 仅作为可选更新评估来源，不是运行依赖。
 metadata:
   trigger: 小红书发布、登录、检索、评论、互动
-  upstream: red-book-skills
-  source: local-patch
+  source: bundled-runtime
 system: shared
-version: 1.0.0
-patch_for: red-book-skills
+version: 1.1.0
 ---
 
 # red-book-skills-patch
 
-本目录是日常调用入口；同级的 `red-book-skills` 是上游执行本体。**不要直接调用
-上游 skill**，也不要把上游源码复制或拆进本 Patch。
+本 skill 自包含脚本、规则、覆盖层及质量门禁；
+无需同级 `red-book-skills`，运行时不访问 GitHub。可信 A2 Fork 仅供评估更新和择优
+移植，A2 快照不得覆盖本地 runtime。
 
-## 首次安装、切换电脑或上游变更
+## 首次安装与验证
 
-在本 Patch 根目录执行：
-
-```bash
-python tools/ensure_compatible.py
-```
-
-Windows PowerShell：
+在本仓库根目录运行：
 
 ```powershell
-py -3 tools\ensure_compatible.py
+py -3 tools\setup_runtime.py
+.\.venv\Scripts\python.exe tools\init_runtime.py
+.\.venv\Scripts\python.exe tools\ensure_compatible.py --refresh
 ```
 
-仓库和目录的固定位置见 [`UPDATE_LOCATIONS.md`](./UPDATE_LOCATIONS.md)。
-上游只能从 `aus666666/red-book-skills` 获取，Patch 从
-`Gitfork300/red-book-skills-patches` 获取。
+门禁会校验随仓库分发的脚本和参考文件、依赖、覆盖层及运行契约。任一步失败都必须
+停止并修复；不要跳过门禁直接发布。需要在会话内重复运行时，已通过的结果可复用；
+代码或规则更新后重新运行 `ensure_compatible.py --refresh`。
 
-该命令会：
+## 执行任务
 
-1. 定位同级 `red-book-skills`（也可用 `RED_BOOK_SKILLS_ROOT` 指定）；
-2. 检查上游入口和执行脚本存在，并在 Git 仓库中确认来源；
-3. 如果声明的依赖文件缺失，从本机 `red-book-skills-upstream/` 仅补回缺失文件；
-4. 拒绝直接改坏的覆盖层状态；
-5. 自动应用 `core-overrides`，自动备份原文件；
-6. 校验覆盖层和 33 项上游契约；
-7. 通过后输出唯一可调用的本体路径。
+每次执行前先遵守本文件、[`INDEX.md`](./INDEX.md)、[`SYSTEMS.md`](./SYSTEMS.md) 和
+[`runtime/INSTRUCTIONS.md`](./runtime/INSTRUCTIONS.md) 中的发布安全、内容和核验规则。
+详见 `runtime/references/`。
 
-任何一步失败都必须停止，不得绕过门禁直接调用上游脚本。
+运行相对路径为 `scripts/...` 的脚本时，将工作目录设为 `runtime/`：
 
-## 日常调用规则（会话内只初始化一次）
-
-- 日常任务以本 Patch 的规则、`INDEX.md` 和 `SYSTEMS.md` 为准。
-- 首次加载 Patch 时运行一次 `ensure_compatible.py`；同一会话后续任务复用已通过的结果，
-  不重复调用、不重复解释上游规则。
-- `ensure_compatible.py` 会比较本机指纹并缓存通过结果；上游、Patch 覆盖层或本体路径
-  发生变化时才自动重新检查。需要强制复核时使用 `ensure_compatible.py --refresh`。
-- 通过门禁后，只能调用它输出的同级 `red-book-skills` 脚本。
-- Cookie、账号配置、浏览器 Profile、日志和状态 JSON 只保存在本机。
-- 上游更新后重新运行门禁；若报告 `DRIFTED`、契约缺失或来源异常，停止操作并按
-  [`UPGRADING.md`](./UPGRADING.md) 处理，不自动覆盖人工修改。
-
-## 架构边界
-
-```text
-red-book-skills-patch  ← 日常加载/规则/安全门禁（唯一入口）
-          │
-          └── ensure_compatible.py
-                    │
-                    └── red-book-skills  ← 上游执行本体（不拆分、不复制）
+```powershell
+Set-Location runtime
+..\.venv\Scripts\python.exe scripts\publish_pipeline.py --help
 ```
 
-完整同步和回滚流程见 [`UPGRADING.md`](./UPGRADING.md)；运行时目录规则见
-[`RUNTIME_SETUP.md`](./RUNTIME_SETUP.md)。
+底层脚本可直接使用同一虚拟环境解释器，例如：
+
+```powershell
+..\.venv\Scripts\python.exe scripts\cdp_publish.py check-login
+```
+
+本机需安装 Chrome/Chromium；登录态、账号配置、浏览器 Profile、稿件和状态文件均保留
+在本机，不要提交到 GitHub 或跨设备复制。
+
+## 依赖和更新
+
+- Python 3.10+；直接 Python 依赖只有 `requests` 与 `websockets`，由
+  `tools/setup_runtime.py` 安装到仓库内 `.venv/`。
+- Chrome/Chromium 是本机外部程序，不随仓库分发。
+- A2 更新检查由 `update-checker` 按需访问 GitHub；发布、登录、搜索和互动不依赖 A2、
+  Git remote 或网络下载代码。
+- 评估更新时只移植经过复核且兼容本地行为的改动，禁止整仓覆盖。

@@ -5,7 +5,7 @@
   "patch_for": "red-book-skills",
   "applies_to_main_version": ">=0.1.0",
   "priority": 23,
-  "author": "Eric",
+  "author": "Project maintainers",
   "created": "2026-09-13",
   "updated": "2026-09-13",
   "dependencies": [],

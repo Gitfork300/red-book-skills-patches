@@ -7,8 +7,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RUNTIME_DIRS = (
+    "runtime/config",
+    "runtime/tmp",
+    # 2026-10-07 起 apply 前备份移到工作区外的 _skill-backup/core-overrides-preapply/，
+    # 不再在仓库内创建 state/backup —— 留在 skills/ 树内会与本体 SKILL.md 同名撞车。
     "core-overrides/state",
-    "core-overrides/state/backup",
     "publish-interval-guard/state",
     "publish-loop-guard/state",
     "timeliness-window/state",

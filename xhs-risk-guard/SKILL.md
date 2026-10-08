@@ -5,7 +5,7 @@ version: 1.3.0
 patch_for: red-book-skills
 applies_to_main_version: ">=0.1.0"
 priority: 12
-author: Eric (定制)
+author: Project maintainers
 created: 2026-09-12
 ---
 
@@ -77,7 +77,7 @@ E6 判定：任一即高危（品牌名≥4 次 / 展位号 / 品牌自有直播
 | F1 | 每条回复必须以标记开头：`[A1]` 评论 / `[A2]` 私信 / `[A9]` 其他 / `[E1]` 异常；格式 = 标记 + 半角空格 + 正文 | `comment-reply-guard` |
 | F2 | 控量：评论 35 秒/条、单轮 ≤20；私信 20 秒/条、单轮 ≤20 | `comment-reply-guard` |
 | F3 | 广告/纯表情/纯 @ 不回；官方机器人推广与对方广告不问不回 | `comment-reply-guard` |
-| F4 | 已回复判定以我方昵称 `叻叻财` 为准，不能只认前缀 | `comment-reply-guard` |
+| F4 | 已回复判定以我方昵称 `AI展会叻` 为准（**不是** `叻叻财`），不能只认前缀 | `comment-reply-guard` |
 
 ## 可执行守卫（`helpers/risk_state.py`）
 

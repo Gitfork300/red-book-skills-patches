@@ -1,46 +1,60 @@
 {
-  "upstream_repo": "aus666666/red-book-skills",
-  "baseline_commit": "b006891ab1ab977b74ddd1b5a034ecc298248f7d",
-  "baseline_date": "2026-08-27T10:28:53Z",
-  "captured_at": "2026-09-17T12:35:09+08:00",
+  "upstream_repo": "Gitfork300/xiaohongshu-skills-A2",
+  "baseline_commit": "b043748282a57e347c52f517dfb59819121134ab",
+  "baseline_date": "2026-05-23T16:14:35Z",
+  "captured_at": "2026-10-08T22:06:10+08:00",
   "hash_algo": "sha256(行尾归一化为 LF 且去 BOM 后)",
-  "purpose": "判断上游是否也改动了被本 patch 覆盖的文件；若上游 hash 变了，OVERWRITE 会丢上游改动，需人工合并",
+  "purpose": "A2 与本地 Windows 兼容运行层架构不同；仅对记录的一对一或映射源路径进行哈希监测，不代表 A2 文件可直接覆盖本地同名文件",
   "files": {
     "SKILL.md": {
-      "upstream_sha256": "68a233e80c200bc34d8371b489aa98f3337c3b43141b199d7c13d18d17990262",
-      "override_sha256": "94e20f21f40d935969e1b297469091d30767898e532fa2b36bdf2a9dbac3e88a"
+      "upstream_sha256": "e01604d830c13d92c568a8a6237d7071e04bc49cfe2217a8a466203789ab6a99",
+      "override_sha256": "aa1ef39d4a910a739c3c2fe9f74e0f32d82f7abc4b5251982871e00b5b21836c"
     },
     "scripts/cdp_publish.py": {
-      "upstream_sha256": "af57ffbbba93e91e2f3c37d886f3c70e2b986355ea66736272149d42a1f93534",
-      "override_sha256": "700317b46e67bb17fdba22de300e524124a11ec51a5bafa33cdbb4fefb3d7390"
+      "upstream_sha256": null,
+      "upstream_absent": true,
+      "mapped_upstream": {
+        "scripts/xhs/publish.py": "4edaec438fa8574f8d9caeba9c5f5acae0e12556a9a1add168b5221ec17cb484",
+        "scripts/xhs/cdp.py": "6c10344720aa5aff841722d0dfe35059ecfddbaea1333cf8d945f6138f8d4aed",
+        "scripts/xhs/errors.py": "5c84dda75c91c75a772f709e42bbbd09d3a725d6a528eacaceb2dd68646af86b"
+      },
+      "override_sha256": "49722e047893ef274216ca5da0b6f08fbc421634a37d66048cac3c1518c83a3b"
     },
     "scripts/chrome_launcher.py": {
-      "upstream_sha256": "a6e2f4b31958a25c7b51662143a1ccacc631e119e0d6e9b7dca2808e2c97b21a",
-      "override_sha256": "0c90b88cff452daee0ccb278cbe1015ca62a64e2a1d42ae7a5c6fb1cd2347512"
+      "upstream_sha256": null,
+      "upstream_absent": true,
+      "mapping_note": "A2 has no standalone chrome_launcher.py; browser lifecycle is organized in other modules and has no one-to-one file mapping",
+      "override_sha256": "f18a82d73f41fdedc02e995c077fe898c73ecc741907efa0636910b5956154c0"
     },
     "scripts/publish_pipeline.py": {
-      "upstream_sha256": "25d9f60193fd45fcc3624327f0a907373fdb0335bd80a869daa3a0e67d18ce09",
-      "override_sha256": "0e32e63394ddf06addec53eb360e4141804ef5f2b96c430fad625a57d00beb65"
+      "upstream_sha256": null,
+      "upstream_absent": true,
+      "mapping_note": "A2 publication is split across scripts/xhs modules and does not have a directly comparable pipeline file",
+      "override_sha256": "8759ad5c25db5d8d1349266b92227a1382810fd0a1388d9dcb06cd8d7a3b609b"
     },
     "references/01-publish-flow.md": {
       "upstream_sha256": null,
       "upstream_absent": true,
-      "override_sha256": "759460e8c79f9e569800ca199afedeca05d136d686f00d052fc3252649a71f59"
+      "mapping_note": "Local operational reference; no same-purpose A2 path is tracked for file-level comparison",
+      "override_sha256": "0c93efcca0a45e75503e794747c15d6bdbf501717f308d8e89d271cb298d8e10"
     },
     "references/03-constraints.md": {
       "upstream_sha256": null,
       "upstream_absent": true,
-      "override_sha256": "436571eb90edfd37df22b2e17ca88232467ed8ddc4f107d6ca299f1c44cc4ade"
+      "mapping_note": "Local operational reference; no same-purpose A2 path is tracked for file-level comparison",
+      "override_sha256": "2f6827e42707ca6c6d2954fccc40e1e4d0a68aed2ccef79b09602cb3576150bd"
     },
     "references/04-pitfalls.md": {
       "upstream_sha256": null,
       "upstream_absent": true,
-      "override_sha256": "49a396b9a88ad4cf94b91998451a1d75be034afe24af1d567610b85602296865"
+      "mapping_note": "Local operational reference; no same-purpose A2 path is tracked for file-level comparison",
+      "override_sha256": "e4b80502595f2529082a6233b025468705ab4cc4042e09081faf4c76e4a39285"
     },
     "references/05-patches-upstream.md": {
       "upstream_sha256": null,
       "upstream_absent": true,
-      "override_sha256": "3d38624c545b34f4bb9f98c0a42770a84682d162014548ebbdc45d386e524f17"
+      "mapping_note": "Local synchronization reference; not a direct A2 counterpart",
+      "override_sha256": "24278ac9d430638709dbf747896426d95f0b5c23c207eedb843317461d22ffc3"
     }
   }
 }

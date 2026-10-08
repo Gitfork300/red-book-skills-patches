@@ -21,14 +21,27 @@ import sys
 import time
 import urllib.request
 
-SKILL = os.path.join(os.path.expanduser("~"), ".workbuddy", "skills", "red-book-skills")
 HELPERS = os.path.dirname(os.path.abspath(__file__))
-PY = os.path.join(SKILL, ".venv", "Scripts", "python.exe")
+PATCH_ROOT = os.path.normpath(os.path.join(HELPERS, "..", ".."))
+SKILL = (
+    os.environ.get("RED_BOOK_SKILLS_ROOT")
+    or os.path.join(PATCH_ROOT, "runtime")
+)
+PY = (
+    os.environ.get("RED_BOOK_SKILLS_PYTHON")
+    or os.path.join(PATCH_ROOT, ".venv", "Scripts", "python.exe")
+)
+if not os.path.isfile(PY):
+    PY = sys.executable
 CACHE = os.path.join(SKILL, "tmp", "login_status_cache.json")
 FOCUS_PS1 = os.path.join(HELPERS, "xhs_focus.ps1")
 PORT = 9222
 # 与 publish-interval-guard patch 解耦：仅当编排层显式注入路径时才集成
 GUARD = os.environ.get("XHS_INTERVAL_GUARD")
+
+# 本机 CDP 一律绕过代理。沙箱代理（sandbox-cli）在故障期对 127.0.0.1 也会返回
+# 502 Bad Gateway，导致 Chrome 明明活着却被判定已死。与 cdp_publish.py 同口径。
+_CDP_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 def resolve_workspace():
@@ -69,7 +82,7 @@ def run(args, timeout=180):
 
 
 def tabs():
-    with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json", timeout=5) as r:
+    with _CDP_OPENER.open(f"http://127.0.0.1:{PORT}/json", timeout=5) as r:
         return json.load(r)
 
 
@@ -95,14 +108,14 @@ def graceful_shutdown():
     """
     try:
         from websockets.sync.client import connect
-        with urllib.request.urlopen(
+        with _CDP_OPENER.open(
             f"http://127.0.0.1:{PORT}/json/version", timeout=5
         ) as r:
             info = json.load(r)
         ws_url = info.get("webSocketDebuggerUrl")
         if not ws_url:
             return "no browser ws url"
-        with connect(ws_url, open_timeout=5) as ws:
+        with connect(ws_url, open_timeout=5, proxy=None) as ws:
             ws.send(json.dumps({"id": 1, "method": "Browser.close"}))
             try:
                 ws.recv(timeout=3)
@@ -114,7 +127,7 @@ def graceful_shutdown():
     for i in range(30):
         time.sleep(1)
         try:
-            with urllib.request.urlopen(
+            with _CDP_OPENER.open(
                 f"http://127.0.0.1:{PORT}/json/version", timeout=2
             ):
                 pass
@@ -224,7 +237,7 @@ def publish():
 def verify_login(tab_id):
     """二次验证：确认标签已稳定离开登录页，排除历史残留标签误判。"""
     try:
-        with urllib.request.urlopen(
+        with _CDP_OPENER.open(
             f"http://127.0.0.1:{PORT}/json/activate/{tab_id}", timeout=5
         ):
             pass

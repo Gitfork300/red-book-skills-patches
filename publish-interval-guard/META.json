@@ -1,11 +1,11 @@
 {
   "name": "publish-interval-guard",
   "system": "publish",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "patch_for": "red-book-skills",
   "applies_to_main_version": ">=0.1.0",
   "priority": 20,
-  "author": "Eric",
+  "author": "Project maintainers",
   "created": "2026-09-04",
   "dependencies": [],
   "conflict_points": [
@@ -21,6 +21,7 @@
     "refs/01-detail.md"
   ],
   "state_files": [
-    "state/publish_log.json"
+    "state/publish_log.json",
+    "state/.guard.lock"
   ]
 }

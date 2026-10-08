@@ -1,11 +1,11 @@
 ---
 name: publish-preflight-guard
 system: publish
-version: 1.17.0
+version: 1.20.0
 patch_for: red-book-skills
 applies_to_main_version: ">=0.1.0"
 priority: 25
-author: Eric (定制)
+author: Project maintainers
 created: 2026-09-11
 ---
 
@@ -20,7 +20,7 @@ created: 2026-09-11
 |---|---|---|---|
 | 1 | 选题查重（**双源**） | `dup_check.py --title … --class a\|industry\|other` 退 0；按"事件"判；A 类当天/行业 3 天/其他 15 天；读 `publish_log.json` + 平台快照 | `publish-loop-guard` |
 | 2 | 地域范围 | `geo_check.py` 退 0；只发江浙沪/珠三角 | `timeliness-window` |
-| 3 | 时效窗口 | `check_window.py` 退 0 或 3（近 7 天） | `timeliness-window` |
+| 3 | 时效窗口 / 可发布资格 | `check_window.py` **必须退 0**；非 0 一律阻断（1=时效不符，3=资格不符或字段 UNKNOWN） | `timeliness-window` |
 | 4 | 可发布资格 | 传 `--live`/`--public-signup`；无直播且不能报名 → 不发 | `timeliness-window` |
 | 5 | 事实与时效 | 时间/价格/人数双源核实 | `writing-facts-only` |
 | 6 | 标题说明内容 | 非"流水号+日期"，含主体+看点/门槛 | `writing-facts-only` |
@@ -53,10 +53,27 @@ python helpers/batch_preflight.py --notes xhs_publish/ai0912_notes.json
 ```
 
 - 第 14 项按题材条件适用（无恶劣天气选题跳过）；级别从稿件文本嗅探透传 `--level`（红/黑 3 篇，其余 1 篇）。
+- 每篇 notes 必须提供非空 `title`/`content` 或有效的 `title_file`/`content_file`；`non_activity: true` 用于非活动类，并触发非活动四维评级块及跳过会展地域/时效/资格闸门。
+- `title_file`、`content_file`、`cover` 相对路径按启动命令时的**当前工作目录**解析；建议绝对路径。缺失的标题/正文文件现在会报错退出，不再静默当空文本。
 - 第 9 项自算核心正文 450–600 / 全篇 <1000；第 17 项校验 `^综合\s*[★☆]`。
 - 默认按发布优先级排序；未标 class 走 `other`（最保守）。
 - 只给自动化结论，5/6/7/10/12/13 仍需人工判（脚本列待核对清单）。
 - ⚠️ **务必发布前跑**：对已发布稿重跑，第 1 项"查重不过"是正确结论（已发过），不是误报。
+- `--only 1,8,9` = 只跑指定**检查项**；`--only-notes 1,3,5` = 只检查指定**稿件**（2026-10-03 修正，详见 refs/02-changelog v1.19.0）。
+
+### 🚨 台账填报纪律（活动类）—— 2026-10-03 血的教训
+
+`live` / `public_signup` / `deadline` / `category` 这四个字段**决定第 3+4 项能否放行**，
+必须照**正文事实**核实后填写，不许照模板默认值随手带过：
+
+- `public_signup`：缴费注册 / 公开票务 → `true`；邀约无名额 → `invited`；都不能就别写这条稿。
+- `deadline`：报名/缴费/投稿截止日，填了才能走「截止日在窗口内」这条路径。
+- `category`：`series` 才有 15 天窗口（专题系列预热/连载），单篇普通稿只有 7 天。
+
+后果实测：CICAI 2026（A 组 3 篇）正文白纸黑字写「参会需缴注册费、缴费截止 10-13」，
+台账却填 `public_signup=false` → 修复后的闸门判 NOT_ELIGIBLE，当场 kill 发布链才拦下。
+反过来，在旧脚本（`ok = rc in (0, 3)`）下这类错判**一律显示 OK**，从不会报警。
+只读回溯工具：`xhs_publish/_audit_eligibility_1003.py`（只判资格，避开已过期的时效噪音）。
 
 ## 三、批量队列控制
 
@@ -85,4 +102,4 @@ python helpers/batch_preflight.py --notes xhs_publish/ai0912_notes.json
 | 场景 | 读哪个文件 |
 | --- | --- |
 | 典型事故复盘、验收清单 | `refs/01-incidents.md` |
-| 版本修改记录（v1.0.0 ~ v1.14.0） | `refs/02-changelog.md` |
+| 版本修改记录（v1.0.0 ~ v1.20.0） | `refs/02-changelog.md` |

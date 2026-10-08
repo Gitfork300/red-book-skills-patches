@@ -130,15 +130,49 @@ var rc = el.querySelector('div.reply.icon-container')
 | 会话条目 | `.xhs-im-conv-item`（子元素带 `__` 后缀，须过滤） |
 | 消息区 | `.xhs-im-msg-list-wrap` |
 | 输入框 | `div.xhs-im-input-bar-editor`（contenteditable） |
-| 发送 | 填值 + `KeyboardEvent('keydown', {key:'Enter'})` |
+| 发送 | **Enter 键**（见下方「输入与发送」；❌ 点发送按钮实测无效） |
 | 会话 ID | `el.getAttribute('data-conv-id')`；单会话 = `/chat/<conv-id>` |
 
 - **我方消息判据 = `.chat-item__bubble--me`**（对方 = `--other`）；`.chat-item` 本身不带左右标记。
 - **首选定位 = 按 `data-conv-id` 导航直达**；❌ 点列表会大面积失败（虚拟滚动 + 已读重排，62 个候选后 30 个 `notfound`）。
 - 抓列表前必须 `navigate` 到**不带 id 的 `/chat`**（带 id 时列表被过滤）；抓列表边滚边累积去重（`scrollTop += 620`）。
-- 填值：`el.innerText = txt` + `InputEvent('input',{bubbles:true})`，不必逐字 `Input.dispatchKeyEvent`。
+
+### 输入与发送（2026-09-25 实测，🔴 与旧版不同）
+
+- ❌ **`Input.insertText`（CDP）会「假成功」**：文本确实写进 DOM、`innerText` 校验也通过，
+  但 **React 受控状态没更新** → 点发送/按 Enter 都无任何反应、**消息根本没发出**，
+  若不复读核验就会误记为"已回"。
+- ✅ 正解三步：`el.focus()` → `document.execCommand('insertText', false, MSG)` →
+  校验 `innerText` 含关键片段 → **`Input.dispatchKeyEvent` 发 Enter**
+  （`keyDown` + `keyUp`，`windowsVirtualKeyCode=13`, `nativeVirtualKeyCode=13`, `text="\r"`）。
+- ❌ **不要点 `.xhs-im-input-bar-action-btn`**：实测点击后消息数不变（即使 `disabled=false`）。
+- 旧版写的 `el.innerText = txt` + `InputEvent('input')` 未在本轮复测，**优先用 execCommand 方案**。
+- **发送后必须复读核验**：重读 `.xhs-im-msg-list` 最后一条，确认 `--me` 且文本**逐字全等**。
+- 🔴 **凡动过「发送」动作的脚本，包括探针 / diag，都必须写回统一台账**
+  （如 `_dm_results.json`）：2026-09-25 有一条私信是在 `_patrol_dm_diag.py` 里验证
+  execCommand+Enter 时发出的（bubbles 1→2、`last_is_me=true`，确实发成功），
+  但没落进结果文件 → 汇总按文件数得 14，实际会话覆盖是 15，**计数口径差 1**，
+  险些误判成「还有 1 条没回」。规则：**脚本名字不重要，发过就要记。**
+
+### 笔记评论定位（mentions 406 / profile DOM 不渲染时的替代路径，2026-09-25 实测）
+
+1. `cdp_publish.py search-feeds --keyword "<笔记标题>"` → 结果 `feeds[]` 含 **`xsecToken`**，
+   按自己的 `note_id` 精确匹配取 token（profile 页与搜索页的 DOM 均可能返回 0 条，**不可用**）。
+2. `get-feed-detail --feed-id <nid> --xsec-token <tok> --load-all-comments --limit 10`
+   → `comments.list[]`（含 `id` / `content` / `subComments` / `userInfo.nickname`）。
+3. 无 token 直接访问 `/explore/<nid>` → **404**（`error_code=300031`）。
 
 **节奏**：间隔 32~44 秒/条，跨轮以「已成功名单」自动跳过（日志 `logs/dm_sent2.json`）。
+
+### respond-comment 定位：`--comment-id` 可能失效，改用作者 + 片段（2026-09-25 实测）
+
+- ❌ 把 `get-feed-detail` 返回的 `comments[].id` 传给 `--comment-id`，脚本拿它去比对 DOM
+  `data-comment-id` → **对不上**，报 `CDPError: Failed to locate reply target comment:
+  target_comment_not_matched`（rc=1）；加 `comment-` 前缀同样无效。
+- ✅ 正解：`--comment-author <昵称>` + `--comment-snippet <评论正文片段>` 模糊定位，
+  实测一次命中。`snippet` 取正文前 10~15 字、**只取纯文字**（带表情/换行会匹配失败）。
+- 回复后复读核验：重读评论列表，确认**评论数 +1**、最后一条作者是自己、文本**逐字全等**。
+- 失败即止，**不要连续重试**（重试容易落成一级评论，见第八节事故）。
 
 ## 八、🔴 头号事故：回复被发成「一级评论」（2026-09-16 实测）
 
@@ -190,69 +224,5 @@ var rc = el.querySelector('div.reply.icon-container')
 
 **参考实现**：`xhs_publish/comment/_delete_0916.py`（带作者校验 + 菜单文本校验 + 回读验证）。
 
-## 十、批量清理不合规存量评论（2026-09-16 实测 20 条全成功）
-
-**场景**：历史回复用了非法标记（`[自动回复]`／`[X1]`）或误用 `[E1]`，需批量删除。
-
-**合规判据**：标记必须 ∈ `[A1] / [A2] / [A9] / [E1]`；`[E1]` **只用于异常**，不得用于正常回复；
-`ai回复已生成` 这类内部提示语属外泄。缺标记 = 不合规，但内容若无误，优先「补发带标记的」而非删除。
-
-### 三条硬教训
-
-1. **🔴 `get-feed-detail` 会漏二级回复** —— 实测 9B 篇 API 只返回 2 条我方回复，
-   DOM 扫描出 **3 条**（漏了 `[X1] 你好，这篇论文未涉及 9-10T…`）。
-   → **存量清理必须以 DOM 扫描为准**，API 结果只能当索引，收尾要再跑一次 DOM 复核。
-2. **🔴 预期正文必须来自真实抓取，不能凭印象手编** —— 港大那条我按记忆写成
-   「这是一场港大（深圳）的闭门活动」，实际是「本场为邀请制，凭主办方请柬入场」，
-   **内容校验当场拦下**（`content_mismatch`），避免删错。
-   → 删除脚本必须比对 `norm(实际innerText).find(norm(预期body)[:14])`，不match 直接跳过。
-3. **Chrome 重启会打断** —— 发布链保活档到期会带走 Chrome（今日 15:44 又重启一次），
-   正在跑的 ws 会 `ConnectionResetError`。**不是脚本 bug，重跑即可**；跑前先看
-   `chrome.exe` 进程启动时间，若刚重启过就等 2 分钟。
-
-### 流程
-
-1. **审计**：`_audit_mycomments.py` 扫 `comments_scan.json`，按标记分类出 bad 清单。
-2. **补 id**：`_collect_del_targets.py` 用 `get-feed-detail` 拿 cid（一级+二级）。
-3. **DOM 复核**：`_recheck_remaining.py` 逐篇扫，补齐 API 漏掉的，取**真实 body**。
-4. **删除**：`_delete_bad_0916.py --note=<关键词>`，按笔记分组（一篇导航一次），
-   逐条「作者校验 → 内容校验 → 真实鼠标点 more → 精确匹配「删除评论」→ 确定 → 回读 gone」，
-   间隔 8–12 秒。
-5. **收尾验证**：再跑一次 DOM 复核，确认只剩合规标记。
-
-> 二级回复与一级评论**同用** `#comment-<cid>` 定位，删除流程完全一致；
-> 但二级回复需先点「展开 N 条回复」才会渲染到 DOM。
-
-## 十一、第二轮补删与判据修正（2026-09-16 下午，累计 23 条）
-
-### 🔴 判据坑：不要用昵称剥离来判定「有无标记」
-
-DOM 抓到的 body 形如 `叻叻财[A1] …`，用 `raw.find("叻叻财")` 剥离前缀**实测失败**：
-昵称有全半角/空格差异，find 返回 -1，8 条全落进 bad（含 5 条合规 `[A1]`）。
-
-**正确做法**：直接看有没有合规标记，不比对昵称——
-
-```python
-OK_ANY = re.compile(r"\[(A1|A2|A9|E1)\]")
-if OK_ANY.search(raw):   # 有 → 合规，跳过
-    continue
-```
-实测 8 条 → 正确分出 3 条待删 + 5 条跳过。删除脚本另有「内容校验」兜底
-（`norm(body)[:14]` 必须出现在 `#comment-<cid>` 的 innerText 里），
-**这次正是它拦下了手写 body 与实际不符的 1 条**（见第十节）。
-
-### 私信没有删除/撤回入口（平台限制）
-
-`[自动回复，可转人工：）]` 这类历史违规私信，**网页版删不掉**：
-两次探测（hover 前后子元素差异 + 右键）确认 `.chat-item` 内只有
-`chat-item__bubble` 与 `chat-item__avatar`，**没有任何操作按钮**。
-→ 只能保证以后不再用该标记，历史遗留如实上报，不要反复尝试。
-
-### mentions 必须抓全量再按 cid 比对
-
-`_probe_mentions_all.py` 的返回量**取决于滚动是否到底**：有一次只回 9~10 条，
-另一次回 96 条。若按"最近的 N 条"当全集，会漏掉大量未回评论（本轮因此漏了 8 条）。
-
-**正确流程**：抓全量 → 解析 `message_list[].comment_info.id` →
-与「已处理 cid 集合」比对 → 剩下的才是待回。**按 cid 判重，不要按昵称判重**
-（同一 cid 在不同解析里昵称可能取到不同字段；已处理 cid 取自 `logs/reply_0916b.json`）。
+> 📦 **批量清理不合规存量评论 + 第二轮补删与判据修正**（原第九、十节之后的部分）
+> 因本文件触上限已外移到 `refs/07-batch-cleanup.md`，内容完整保留。

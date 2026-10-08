@@ -1,11 +1,11 @@
 ---
 name: publish-loop-guard
 system: publish
-version: 1.8.1
+version: 1.10.0
 patch_for: red-book-skills
 applies_to_main_version: ">=0.1.0"
 priority: 28
-author: Eric (定制)
+author: Project maintainers
 created: 2026-09-11
 ---
 

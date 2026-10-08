@@ -81,7 +81,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PATCH_ROOT = os.path.normpath(os.path.join(HERE, ".."))
 PATCHES_ROOT = os.path.normpath(os.path.join(PATCH_ROOT, ".."))
 
-WS_DEFAULT = os.environ.get("XHS_WORKSPACE") or os.path.expanduser("~/Documents/workbuddy-skill")
+WS_DEFAULT = os.environ.get("XHS_WORKSPACE") or os.path.expanduser("~/xhs-workspace")
 TAGS_PATH = os.environ.get("XHS_NEAR_DUP_TAGS") or os.path.join(
     PATCH_ROOT, "state", "near_dup_tags.json"
 )

@@ -60,7 +60,7 @@ def check_files() -> tuple[list[str], int]:
     for base, dirs, files in os.walk(ROOT):
         dirs[:] = [
             d for d in dirs
-            if d not in {".git", "_archive", "__pycache__"}
+            if d not in {".git", "_archive", "__pycache__", ".venv"}
         ]
         for name in files:
             path = Path(base) / name

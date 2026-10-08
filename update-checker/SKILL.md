@@ -1,22 +1,23 @@
 ---
 name: update-checker
 system: shared
-version: 1.1.0
+version: 1.4.0
 patch_for: red-book-skills
 applies_to_main_version: ">=0.1.0"
 priority: 5
-author: Eric (定制)
+author: Project maintainers
 created: 2026-09-04
 ---
 
 # update-checker
 
-> Patch：定期检查上游 `aus666666/red-book-skills` 仓库是否有更新。
-> 适用范围：所有 red-book-skills 安装实例。
+> Patch：定期检查可信上游 Fork `Gitfork300/xiaohongshu-skills-A2` 是否有更新。
+> 适用范围：本仓库随附的独立 runtime。
 
 ## 为什么需要
 
-- 原仓库会更新，patch 是叠加在主 skill 之上的独立 skill——更新检查让用户**及时**知道何时需要重新合并 patch。
+- A2 Fork 采用与当前 Windows 兼容运行层不同的项目结构。更新只作为参照源；脚本改动需先做适配评估，不能整仓替换。
+- 更新检查让用户**及时**知道何时需要评估和选择性合并。
 - agent 不主动检查会"忘了"，必须由脚本定时跑。
 - 不能自动合并——更新可能引入不兼容变更，必须人工决策。
 
@@ -62,7 +63,7 @@ python <patch>/helpers/update_check.py acknowledge --sha <commit-sha>
 ### 为什么需要 `diff-local`
 
 只订阅 commit sha 只能回答"上游动没动"，回答不了"这次改动会不会砸到我的本地定制"。
-本地 `red-book-skills` 是**拷贝安装（无 `.git`）**，且叠加了若干本地增强
+本地 bundled runtime 随 Patch 分发，且包含若干本地增强
 （发布按钮三级重试、Windows 沙箱下 Chrome 脱离 job object、发布间隔记录等）。
 `diff-local` 下载上游 tarball 做内容级比对，输出四类结果：
 
@@ -71,7 +72,7 @@ python <patch>/helpers/update_check.py acknowledge --sha <commit-sha>
 | 相同 | 双方一致 | 无需动作 |
 | 内容不同 | 本地定制 或 上游已改 | **逐项 diff 判断**，不能整体覆盖 |
 | 仅上游有 | 上游新增文件 | 评估是否引入 |
-| 仅本地有 | 本地增补 / 运行时产物 | 保留；运行时产物可清 |
+| 仅本地有 | 本地增强、bundled runtime 文件或运行时产物 | 保留；仅清理确认无用的运行时产物 |
 
 **必须忽略行尾差异**：Windows 副本是 CRLF、上游是 LF，不归一化会导致
 几乎所有文件被误报为"不同"。脚本已内置归一化（统一行尾 + 去 BOM），
@@ -81,11 +82,11 @@ python <patch>/helpers/update_check.py acknowledge --sha <commit-sha>
 
 ### 检测源
 
-按以下顺序尝试，首个成功者为准：
+先读取可信 Fork `pyproject.toml` 的版本号；只有版本变化或尚无版本记录，才继续按以下顺序查询最新 commit：
 
-1. `https://api.github.com/repos/aus666666/red-book-skills/commits?per_page=1`
-2. `https://api.github.com/repos/aus666666/red-book-skills/commits?per_page=1&sha=master`
-3. `git ls-remote https://github.com/aus666666/red-book-skills.git HEAD`（仅当 git 可用）
+1. `https://api.github.com/repos/Gitfork300/xiaohongshu-skills-A2/commits?per_page=1`
+2. `https://api.github.com/repos/Gitfork300/xiaohongshu-skills-A2/commits?per_page=1&sha=main`
+3. `git ls-remote https://github.com/Gitfork300/xiaohongshu-skills-A2.git HEAD`（仅当 git 可用）
 
 ### 状态文件
 
@@ -96,6 +97,8 @@ python <patch>/helpers/update_check.py acknowledge --sha <commit-sha>
   "last_check_epoch": 1725450000,
   "last_check_iso": "2026-09-04T16:54:55+08:00",
   "last_check_status": "ok | network_error | rate_limited",
+  "last_known_version": "0.1.0",
+  "upstream_version_etag": "W/...",
   "last_known_sha": "abc123...",
   "last_known_iso": "2026-09-01T10:00:00+08:00",
   "last_known_message": "fix: ...",
@@ -103,6 +106,11 @@ python <patch>/helpers/update_check.py acknowledge --sha <commit-sha>
   "interval_sec": 604800
 }
 ```
+
+版本号取自可信 Fork `pyproject.toml` 的 `[project].version`。每次到期检查只探测该
+小文件，并使用 HTTP ETag；若版本与状态文件相同（包括服务端返回 304），就记录本次
+检查时间并跳过 commit 查询。只有版本变化时才查询最新 commit 并提示评估。上游维护者
+应在需要触发同步评估时递增该版本号；仅提交代码但不改版本号的变更会被有意忽略。
 
 ### 退出码
 
@@ -115,25 +123,28 @@ python <patch>/helpers/update_check.py acknowledge --sha <commit-sha>
 
 ### 重要原则
 
-- **只读**：本脚本从不修改主 skill 或 patch 文件（`diff-local` 也仅在系统临时目录解压）
+- **只读**：本脚本从不修改 bundled runtime 或 patch 文件（`diff-local` 也仅在系统临时目录解压）
 - **不自动合并**：检测到更新只通知，不动手
 - **重复提醒抑制**：距离上次成功提醒 < 1 天时不再重复输出
 - **优雅降级**：无网/限流时退出 2/3，不影响其他流程
 - **`diff-local` 退出码 1 不等于有问题**：只要本地有定制，退出码必然是 1；应看清单内容而非退出码
+- **更新源固定为 `Gitfork300/xiaohongshu-skills-A2`**：检测只读该 Fork；发现提交只通知，不拉取、不覆盖。
+- **版本优先**：版本未变不查 commit；版本变化后才检查提交并通知。
+- **只合并审核通过的改动**：非覆盖文件按需逐文件同步；覆盖文件先合并到 `core-overrides/overrides/` 再 apply，禁止整目录覆盖。
 
 ## 与主 skill 的冲突点
 
-- **无**。本 patch 只读 GitHub API，不触碰本地文件。
+- **无**。本 patch 只读取 Fork 的 GitHub API/codeload 和本地 bundled runtime；`diff-local` 仅在临时目录解压，不改写本地文件。
 
 ## 配合使用（更新发现后如何合并）
 
 1. 看到 `UPDATE_AVAILABLE` 提示后，先跑 `diff-local` 看清**上游到底改了哪些文件**，
    再对比 `state/update_state.json` 中的 `last_known_message`
 2. 决策：
-   - **更新影响小**（仅文档/示例）→ 直接覆盖对应文件（注意保留本地增强）
+   - **更新影响小**（仅文档/示例）→ 逐个审核并同步批准的文件
    - **更新影响 patch 范围** → 查 `patches/*/META.json` 的 `applies_to_main_version` 是否还满足
    - **更新含 BREAKING**（如 `scripts/cdp_publish.py` 改了关键签名）→ 暂停使用，联系 patch 作者适配
-3. **切勿整体覆盖本地 skill**：本地若已有增强（见下表），覆盖即回退
+3. **切勿整体覆盖本地 runtime**：它与 A2 架构不同，覆盖即破坏接口；仅移植审核批准的功能
 4. 合并完成后执行 `acknowledge --sha <新 sha>`，避免重复提醒
 5. 复核：再跑一次 `diff-local`，确认只剩预期中的定制差异
 
@@ -148,6 +159,9 @@ python <patch>/helpers/update_check.py acknowledge --sha <commit-sha>
 
 ## 修改记录
 
+- v1.4.0 (2026-10-08) 增加 A2 `pyproject.toml` 项目版本探测和 ETag 缓存；版本未变时跳过 commit 查询。
+- v1.3.0 (2026-10-08) 更新可信源为 `Gitfork300/xiaohongshu-skills-A2`；说明该项目结构不同，只能经评估适配，不得整仓替换。
+- v1.2.0 (2026-10-08) 更新检查源切换为用户维护的 Fork，并明确只通知、不拉取；上游变更须评估后选择性合并。
 - v1.1.0 (2026-09-12) 新增 `diff-local` 子命令：拉上游快照做内容级对比，
   内置行尾/BOM 归一化，输出四分类差异；补记本地增强清单
 - v1.0.0 (2026-09-04) 初版

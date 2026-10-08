@@ -1,7 +1,25 @@
 > read_when: 需要回溯 publish-preflight-guard 历史版本时
-> 本文件是 `SKILL.md` 的修改记录（v1.0.0 ~ v1.17.0），规则结论仍以 SKILL.md 为准（system: publish）。
+> 本文件是 `SKILL.md` 的修改记录（v1.0.0 ~ v1.19.0），规则结论仍以 SKILL.md 为准（system: publish）。
 
 # publish-preflight-guard / refs — 修改记录
+
+- v1.20.0 (2026-10-08) 明确 notes 中非活动类必须声明 `non_activity: true`，列明路径按当前工作目录解析；标题/正文路径不存在或内容为空时报错退出，避免用空文本产生假查重或假预检结果。
+- v1.19.0 (2026-10-03 夜) `batch_preflight.py` 三处修正（跑 10-03 批次时暴露，前两个是「**假结果**」性质，非单纯报错）：
+  1. **`run()` 加参数归一化 `_s()`**：notes JSON 里 `live` / `public_signup` 写成 JSON 布尔值时，
+     `subprocess.run` 抛 `TypeError`（只吃 str/bytes/PathLike），被 `except` 吞成 **exit=99**。
+     表现为整批第 3+4 项「执行失败」，长期以来被当成脚本 bug 忽略 → **真判定从未执行过**。
+     修复：bool 转 yes/no，None 转 unknown，其余转 str。
+  2. **第 3+4 项退出码判定收紧**：原写 `ok = rc in (0, 3)`，而 `check_window` 的退出码 **3 = 资格 BLOCK**
+     （资格不符、**以及字段未核实的 UNKNOWN** 都返回 3）→ 这类稿一律显示 OK，属**假通过**。
+     改为 `ok = rc == 0`。本次修复后首次实跑即当场拦下一次误发（见下）。
+  3. **`--only` 语义纠正**：原实现是「按序号过滤稿件」，与文档「只跑指定条目」不符；
+     改为**只跑指定检查项**（1/2/3/4/8/9/11/14/15/16/17），旧行为迁移到新增的 `--only-notes`。
+     同步补 `rc/out/ok` 初始化，避免 SKIP 分支 `NameError`。
+  > 配套：**notes 台账填报纪律** —— 活动类的 `live` / `public_signup` / `deadline` / `category`
+  > 必须照**正文事实**核实后填写，不许照默认值随便填。本次 A 组（CICAI 2026）正文写明
+  > 「参会需缴注册费、缴费截止 10-13」，台账却填了 `public_signup=false`，修复后实跑判 NOT_ELIGIBLE，
+  > 当场 kill 掉发布链核实后才放行（应填 true + deadline=2026-10-13 + category=series）。
+  > 只读回溯脚本见 `xhs_publish/_audit_eligibility_1003.py`（用「资格」判据，跳过会全是噪音的时效项）。
 - v1.17.0 (2026-09-17 凌晨) 第 9 项字数**必须与发布链同口径（含空格计）**：2026-09-16 踩坑 ——
   本地脚本「去空格」算 **607**、发布链 `check_wording` 按「含空格」算 **647**，同一篇两边结论不同。
   定为：**一律以 `check_wording.py` / `batch_preflight.py` 的输出为准，自算脚本不得先去空格**。
@@ -29,4 +47,12 @@
 - v1.15.2 (2026-09-16) 第 9 项字数硬限同步为用户新口径：核心正文 **450–600 字**（原 200–600）。
 - v1.15.3 (2026-09-16) 总检查 18→**19 项**：新增「标题标记」——须有且仅有 1 个方括号前缀（SSS/SS/S/A/P/X/天气/Canary），字宽 ≤18；第 18 项同步支持 grade 别名。
 - v1.16.0 (2026-09-16) 第 10 项升级为「封面合规 + 来源台账」：展会/活动类批次接 `check_cover_source.py`（官方宣传图 ≥80% 硬指标，无台账=不能排队）；发布链硬闸门 6→**7 项**；可自动化项 11→12。
-\n
+- v1.18.0 (2026-09-26 凌晨) `batch_preflight.py` 三处修正（2026-09-26 跑 D 组 20 篇时暴露，全是「工具缺参 → 假 FAIL」）：
+  1. **非活动类支持跳过会展三闸门**：稿件加 `"non_activity": true` → 第 2（地域）/ 第 3+4（时效+资格）项显式打印 `SKIP`，不再因为没传 `--city` / `--start` 而 exit=2 假 FAIL。
+     理由：skill 明文「话题 C（技术前沿）非活动类 → 不适用会展三闸门」。
+  2. **第 17 项支持适配四维**：`non_activity` 且正文含 `阅读门槛`/`信息量级` 时，按 `RATING_FIELDS_ADAPTED = (阅读门槛, 适合人群, 专业性, 信息量级, 来源：)` 校验。
+     理由：用户 2026-09-16 口径「话题 C 的评级块按适配维度校验」，原脚本只认展会四维（`参与难度`/`活动规模`）→ 20 篇全报「缺字段」。
+  3. **第 3+4 项补透传 `--deadline` 与 `--category`**：原来只能传 `--start`，导致「报名/征集截止日在窗口内」的系列类稿（15 天窗）传不进闸门，只能误报超窗。
+     新增 notes 字段：`deadline`（截止日）、`category`（`normal`/`series`，默认 `normal`）、`public_signup`（`yes`/`no`/`unknown`/`invited`）。
+  - ⚠ 仍**未**接入可选参数：`--live` 由 `live: true/false/null` 三态映射（null → `unknown`）。
+  - ⚠ 仍未覆盖：第 12 项「AI 声明」——`cdp_publish.py publish` 没有 `--content-declaration` 参数，含 AI 图/文的批次目前只能靠封面右下角「AI 合成·示意图」水印兜底，属**已知缺口**。

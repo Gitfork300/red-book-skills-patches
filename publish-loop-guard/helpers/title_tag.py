@@ -17,9 +17,12 @@
    `[P]`   = 小众消息（企业自办/社群/小展）
    `[X]`   = 其他无法归类
 
-3. **[专题] 不进标题**，改用**系列编号**（如「云栖①」）：
-   省 3 字宽，且连载编号制造追更动机 —— 官方数据显示本号涨粉率仅 **0.09%**
-   （4 万阅读只涨 38 粉），缺的正是「关注理由」。
+3. **用户指定专题 —— 标题标记用「[专题全名]」**（2026-09-27 用户口径，**覆盖本条旧版**）：
+   `[2026云栖大会]` / `[赛博户外]` 这样写；**不用缩写代号**（`[CY]`、`[S]` 等读者看不懂，
+   已判定为错误），**也不是 `[Canary]`**（那是对照表实验组，与本类互不相干）。
+   > 旧版（2026-09-16）写的是「[专题] 不进标题，改用系列编号如『云栖①』，省 3 字宽」；
+   > 现已作废 —— 缩写代号 [`S`] 实际是与等级标记混淆的误用（[S]=政府牵头·小型活动）。
+   > 系列编号（`--series-no`）降级为**可选补充**，不再承担「表达专题」的职责。
 
 等级判据（按主办方，不按规模感觉）
 ----------------------------------
@@ -55,6 +58,12 @@ import re
 import sys
 from datetime import datetime
 
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except AttributeError:
+        pass
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 PATCH_ROOT = os.path.normpath(os.path.join(HERE, ".."))
 PATCHES_ROOT = os.path.normpath(os.path.join(PATCH_ROOT, ".."))
@@ -78,6 +87,14 @@ GRADES = {
 }
 # 品类标记（与等级互斥显示；天气类必然政府发布，等级冗余 → 显示天气）
 CATEGORIES = ["天气", "Canary"]
+
+# 用户指定专题使用标题全名；到期日当天结束后不再允许用于新稿。
+TOPIC_DEADLINES = {
+    "2026云栖大会": "2026-09-30",
+    "赛博户外": "2026-10-07",
+}
+TOPICS = list(TOPIC_DEADLINES)
+
 ALL_TAGS = list(GRADES) + CATEGORIES
 
 # 等级 → 限次窗口小时数（与 near_dup_limit.LEVEL_WINDOW_HOURS 必须保持一致）
@@ -100,21 +117,26 @@ TAG_RE = re.compile(r"^\s*\[([^\]\[]+)\]\s*")
 MULTI_TAG_RE = re.compile(r"^\s*(\[[^\]\[]+\]\s*){2,}")
 
 
-def make_title(body, grade=None, category=None, canary=False, series_no=None):
-    """生成带标记的标题。优先级：Canary > 天气 > 等级。"""
+def make_title(body, grade=None, category=None, canary=False, series_no=None,
+               topic=None):
+    """生成带标记的标题。优先级：Canary > 天气 > 用户指定专题 > 等级。"""
     body = (body or "").strip().lstrip("]").strip()
     body = re.sub(r"^\s*\[[^\]\[]+\]\s*", "", body)  # 去掉已有前缀，防重复叠加
     if canary:
         tag = "Canary"
     elif category == "天气" or category == "天气预警":
         tag = "天气"
+    elif topic:
+        tag = (topic or "").strip()
     elif grade:
         tag = grade.upper()
     else:
         tag = "X"
-    if tag not in ALL_TAGS:
-        raise ValueError(f"非法标记 {tag}（合法：{'/'.join(ALL_TAGS)}）")
-    # 系列编号：省字宽的「专题」表达，如 云栖①
+    if tag not in ALL_TAGS and tag not in TOPICS:
+        raise ValueError(f"非法标记 {tag}（合法等级/品类：{'/'.join(ALL_TAGS)}；用户指定专题：{'/'.join(TOPICS)}）")
+    if topic and topic_expired(tag):
+        raise ValueError(f"专题标记 [{tag}] 已于 {TOPIC_DEADLINES[tag]} 到期，不能用于新稿")
+    # 系列编号：可选补充，如 云栖①（专题本身已由 [专题名] 表达）
     if series_no:
         body = f"{body} {series_no}"
     return f"[{tag}] {body}".strip()
@@ -132,12 +154,22 @@ def parse_title(title):
     if tag in CATEGORIES:
         return {"tag": tag, "kind": "category", "grade": "", "category": tag,
                 "canary": tag == "Canary", "body": body, "ok": True}
+    if tag in TOPICS:
+        return {"tag": tag, "kind": "topic", "grade": "", "category": "",
+                "canary": False, "body": body, "ok": True}
     g = tag.upper()
     if g in GRADES:
         return {"tag": g, "kind": "grade", "grade": g, "category": "",
                 "canary": False, "body": body, "ok": True}
     return {"tag": tag, "kind": "unknown", "grade": "", "category": "",
             "canary": False, "body": body, "ok": False}
+
+
+def topic_expired(tag, today=None):
+    deadline = TOPIC_DEADLINES.get(tag)
+    if not deadline:
+        return False
+    return (today or datetime.now().date()) > datetime.strptime(deadline, "%Y-%m-%d").date()
 
 
 def check_title(title):
@@ -153,11 +185,14 @@ def check_title(title):
     p = parse_title(t)
     if p["kind"] == "none":
         hard = True
-        reasons.append(f"[P0] 缺少标题标记：须以 [{'/'.join(ALL_TAGS)}] 之一开头"
-                       f"（如 `[A] xxx`、`[天气] xxx`、`[Canary] xxx`）")
+        reasons.append(f"[P0] 缺少标题标记：须以等级 [{'/'.join(GRADES)}]、"
+                       f"品类 [{'/'.join(CATEGORIES)}] 或尚未到期的用户指定专题开头")
     elif p["kind"] == "unknown":
         hard = True
-        reasons.append(f"[P0] 标记 [{p['tag']}] 非法（合法：{'/'.join(ALL_TAGS)}）")
+        reasons.append(f"[P0] 标记 [{p['tag']}] 非法（合法等级/品类：{'/'.join(ALL_TAGS)}；用户指定专题：{'/'.join(TOPICS)}）")
+    elif p["kind"] == "topic" and topic_expired(p["tag"]):
+        hard = True
+        reasons.append(f"[P0] 专题标记 [{p['tag']}] 已于 {TOPIC_DEADLINES[p['tag']]} 到期，不能用于新稿")
     w = title_width(t)
     if w > MAX_WIDTH_HARD:
         hard = True
@@ -183,7 +218,8 @@ def main():
     ap.add_argument("--category", help="品类：" + "/".join(CATEGORIES))
     ap.add_argument("--canary", action="store_true",
                     help="实验批次（10%% 新尝试）")
-    ap.add_argument("--series-no", help="系列编号，如 云栖①（替代 [专题]，省字宽）")
+    ap.add_argument("--topic", help="用户指定专题全名（仅限登记且未到期的专题）")
+    ap.add_argument("--series-no", help="系列编号，如 云栖①（可选补充）")
     ap.add_argument("--check", metavar="TITLE", help="校验单个标题")
     ap.add_argument("--plan", help="批量校验队列 JSON（[{title,...}]）")
     ap.add_argument("--scan", action="store_true", help="扫描已发日志统计打标覆盖率")
@@ -193,7 +229,7 @@ def main():
     if args.make:
         try:
             out = make_title(args.make, args.grade, args.category,
-                             args.canary, args.series_no)
+                             args.canary, args.series_no, args.topic)
         except ValueError as e:
             print(str(e), file=sys.stderr)
             return 2

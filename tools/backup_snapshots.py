@@ -10,7 +10,7 @@ red-book-skills 定期版本备份（工作区真实快照，含未提交/未跟
     所以这里对**工作区目录**做 tar 快照，把 .git 目录一并打进去 ——
     解压即得到"带完整 git 历史的完整工作区"，恢复成本最低。
 
-备份产物结构（DEST = ~/Documents/red-book-skills-backup/）：
+备份产物结构（默认 DEST = ~/xhs-workspace/_skill-backup/）：
     README.md                     恢复说明（脚本自动生成/维护）
     latest.json                   最近一次成功的指纹与快照路径
     FAILED.txt                    仅失败时存在，成功即删除（失败信号）
@@ -18,7 +18,7 @@ red-book-skills 定期版本备份（工作区真实快照，含未提交/未跟
     snapshots/<ts>_<fp8>/
         META.json                 时间、指纹、两仓 git HEAD、文件数、体积、排除项
         body.tar.gz               本体工作区（排除 .venv/tmp/__pycache__ 等）
-        patches.tar.gz            补丁仓工作区（排除 state/backup 等）
+        patches.tar.gz            补丁仓工作区（排除 __pycache__ 等）
 
 去重：内容指纹（逐文件 sha256 聚合）与上次一致 → 不留新快照，直接跳过。
 轮转：只保留最近 --keep 个快照（默认 30），更旧的本工具自己删。
@@ -48,9 +48,9 @@ import traceback
 from datetime import datetime
 
 HOME = os.path.expanduser("~")
-BODY = os.path.join(HOME, ".workbuddy", "skills", "red-book-skills")
-PATCH = os.path.join(HOME, ".workbuddy", "skills", "red-book-skills-patches")
-DEFAULT_DEST = os.path.join(HOME, "Documents", "red-book-skills-backup")
+PATCH = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+BODY = os.path.join(PATCH, "runtime")
+DEFAULT_DEST = os.path.join(HOME, "xhs-workspace", "_skill-backup")
 
 # 排除规则：dirnames 按目录名任意层级匹配；rel_prefixes 按相对路径前缀；globs 按文件名
 RULES = {
@@ -60,7 +60,9 @@ RULES = {
         "globs": ("*.pyc", "*.pyo", "*.bak", "*.swp", "*.log"),
     },
     "patches": {
-        "dirnames": {"__pycache__", ".pytest_cache", "node_modules"},
+        "dirnames": {".venv", "__pycache__", ".pytest_cache", "node_modules"},
+        # 2026-10-07 起 apply 前备份已移到工作区外的 _skill-backup/，
+        # 仓库内不再生成；保留此前缀仅为历史遗留兜底。
         "rel_prefixes": ("core-overrides/state/backup",),
         "globs": ("*.pyc", "*.pyo", "*.bak", "*.swp"),
     },
@@ -291,7 +293,7 @@ def clear_alerts(dest):
 
 
 def make_readme(dest):
-    txt = """# red-book-skills 版本备份
+    txt = """# red-book-skills-patches 独立运行层版本备份
 
 由 `red-book-skills-patches/tools/backup_snapshots.py` 定期生成，**不要手工改动本目录的
 `snapshots/` 结构**（命名格式被轮转逻辑依赖）。
@@ -302,12 +304,14 @@ def make_readme(dest):
 
 | 文件 | 内容 |
 | --- | --- |
-| `body.tar.gz` | 本体工作区 `~/.workbuddy/skills/red-book-skills/`（含 `.git`、未跟踪文件、未提交的覆盖产物） |
-| `patches.tar.gz` | 补丁仓 `~/.workbuddy/skills/red-book-skills-patches/`（含 `.git`） |
-| `META.json` | 生成时间、内容指纹、两仓 git HEAD、文件数、体积、当时生效的排除规则 |
+| `body.tar.gz` | 本仓库 `runtime/` 执行代码与操作参考 |
+| `patches.tar.gz` | 本仓库规则、工具、状态说明和覆盖权威副本 |
+| `META.json` | 生成时间、内容指纹、仓库 git HEAD、文件数、体积、当时生效的排除规则 |
 
-排除项（可重建，不进备份）：本体的 `.venv/ tmp/ __pycache__/ .pytest_cache/`、
-补丁仓的 `core-overrides/state/backup/`、`*.pyc/*.bak/*.swp`。
+排除项（可重建，不进备份）：runtime 的 `tmp/ __pycache__/ .pytest_cache/`、
+Patch 的 `.venv/` 与 `core-overrides/state/backup/`（2026-10-07 起已移到
+`~/xhs-workspace/_skill-backup/core-overrides-preapply/`，此处仅为历史兜底）、
+`*.pyc/*.bak/*.swp`。
 `config/accounts.json`（凭据）默认**不在**备份内，如需纳入见脚本顶部 `INCLUDE_CREDENTIALS`。
 
 ## 怎么恢复

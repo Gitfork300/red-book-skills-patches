@@ -1,11 +1,8 @@
 # ── Python 编译产物 ──────────────────────────────
 __pycache__/
 *.py[cod]
-
-# ── core-overrides 自动备份 ──────────────────────
-# 每次 apply_overrides.py apply 前会把本体文件备份到 state/backup/<ts>/。
-# 不入库：一是随每次 apply 无限增长，二是内容可由 overrides/ 重放得到。
-core-overrides/state/backup/
+.venv/
+runtime/tmp/
 
 # ── 日志/状态备份 ────────────────────────────────
 *.bak
@@ -18,10 +15,14 @@ core-overrides/state/backup/
 **/state/*
 !**/state/README.md
 !**/state/.gitkeep
-!**/state/backup/
-**/state/backup/*
-!**/state/backup/README.md
-!**/state/backup/.gitkeep
+
+# ── core-overrides apply 前备份（2026-10-07 移到技能树外）──────
+# 现在落在 ~/WorkBuddy/ai-xhs/_skill-backup/core-overrides-preapply/。
+# 为什么必须移出 skills/ 树：WorkBuddy 递归扫描 skills/**/SKILL.md 并按
+# frontmatter 的 name 注册技能，备份里的 SKILL.md 与本体同名 → 列表出现多条
+# 同名 red-book-skills，且备份是旧版，同名时加载到哪份不确定、有回退风险。
+# 仓库内已不再生成该目录；此规则仅为历史遗留兜底。
+core-overrides/state/backup/
 
 # 各 patch 的 logs/ 运行时日志，同理不入库。
 **/logs/*

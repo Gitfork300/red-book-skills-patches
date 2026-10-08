@@ -1,11 +1,11 @@
 {
   "name": "comment-reply-guard",
-  "version": "1.15.0",
+  "version": "1.22.0",
   "system": "comment",
   "patch_for": "red-book-skills",
   "applies_to_main_version": ">=0.1.0",
   "priority": 11,
-  "author": "Eric",
+  "author": "Project maintainers",
   "created": "2026-09-14",
   "dependencies": [],
   "conflict_points": [

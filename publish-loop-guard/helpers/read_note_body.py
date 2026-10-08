@@ -63,7 +63,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PATCH_ROOT = os.path.normpath(os.path.join(HERE, ".."))
 PATCHES_ROOT = os.path.normpath(os.path.join(PATCH_ROOT, ".."))
 SKILLS_ROOT = os.path.normpath(os.path.join(PATCHES_ROOT, ".."))
-SKILL_DIR = os.environ.get("XHS_SKILL_DIR") or os.path.join(SKILLS_ROOT, "red-book-skills")
+SKILL_DIR = (
+    os.environ.get("XHS_SKILL_DIR")
+    or os.environ.get("RED_BOOK_SKILLS_ROOT")
+    or os.path.join(PATCHES_ROOT, "runtime")
+)
 
 HOST = os.environ.get("XHS_CDP_HOST", "127.0.0.1")
 PORT = int(os.environ.get("XHS_CDP_PORT", "9222"))
@@ -128,9 +132,13 @@ TITLE_JS = r"""
 """
 
 
+# 本机 CDP 必须绕过代理：沙箱代理故障期返回 502，会被误判成 Chrome 已死
+_CDP_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
 def _http_json(method: str, path: str):
     req = urllib.request.Request(CDP + path, method=method)
-    with urllib.request.urlopen(req, timeout=20) as r:
+    with _CDP_OPENER.open(req, timeout=20) as r:
         return json.load(r)
 
 
@@ -382,13 +390,17 @@ def _ensure_venv_runtime() -> None:
         return
     except Exception:
         pass
-    venv_py = os.path.join(SKILL_DIR, ".venv", "Scripts", "python.exe")
-    if not os.path.isfile(venv_py):
-        venv_py = os.path.join(SKILL_DIR, ".venv", "bin", "python")
+    venv_py = os.environ.get("RED_BOOK_SKILLS_PYTHON")
+    if not venv_py:
+        candidates = (
+            os.path.join(PATCHES_ROOT, ".venv", "Scripts", "python.exe"),
+            os.path.join(PATCHES_ROOT, ".venv", "bin", "python"),
+        )
+        venv_py = next((candidate for candidate in candidates if os.path.isfile(candidate)), sys.executable)
     if os.path.isfile(venv_py) and os.path.abspath(sys.executable) != os.path.abspath(venv_py):
         r = subprocess.run([venv_py, os.path.abspath(__file__)] + sys.argv[1:])
         sys.exit(r.returncode)
-    raise SystemExit("找不到运行环境：需要 websockets（装在 skill 的 .venv 内）")
+    raise SystemExit("当前 Python 缺少 websockets；请先运行 tools/setup_runtime.py")
 
 
 if __name__ == "__main__":

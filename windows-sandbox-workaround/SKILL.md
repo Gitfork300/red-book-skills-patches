@@ -1,11 +1,11 @@
 ---
 name: windows-sandbox-workaround
 system: shared
-version: 1.6.9
+version: 1.7.0
 patch_for: red-book-skills
 applies_to_main_version: ">=0.1.0"
 priority: 10
-author: Eric (定制)
+author: Project maintainers
 created: 2026-09-04
 ---
 
@@ -13,6 +13,7 @@ created: 2026-09-04
 
 > Patch：解决 Windows 受限执行环境下 Chrome 子进程被会话回收、Cookie 无法落盘、用户看不到浏览器的问题。
 > 适用范围：Windows 沙箱 / 受限会话 / WSL / Git Bash / PowerShell ACP 沙箱。
+> 定时巡检/复核先探测配置的 CDP HTTP 端点；不可达就明确失败并停止，不要自动启动 Chrome，也不要用过期快照下结论。
 
 ## 铁律速查
 
@@ -25,7 +26,9 @@ created: 2026-09-04
 7. **探活只看 CDP HTTP 端点**（裸 socket 会假超时、走代理会返 502）；`tasklist` 的 chrome 条数不可作证据。
 8. **对外网络可达性：TLS 443 握手成功才算数**（`ping` / TCP / 80 端口都是假通）。
 9. **同一文件不要并行发多个 Edit**（后写覆盖前写、都报成功）；改完逐文件回读复核。
-10. **含 `()` 的路径偶发失败**（Write 会 EPERM 截断、Read/Glob 假报不存在）→ 原样重试一次，仍败换通道（heredoc / `C:\Users\Public` 中转 / PowerShell 落盘）。
+10. **含 `()` 的路径偶发失败**（Write 会 EPERM 截断、Read/Glob 假报不存在）→ 原样重试一次，仍败换通道（heredoc / `%TEMP%` 中转 / PowerShell 落盘）。
+11. **无人值守巡检先探测预期 CDP HTTP 端点**；端口不可达则明确失败并停止，不得为巡检自动拉起新的 Chrome。
+12. 取数后的快照必须核对 `fetched_at` 确属本轮新取；时间戳缺失或过旧即视为取数失败，不得据此给出“无变化/无数据”结论。
 
 ## 使用
 
@@ -122,4 +125,4 @@ created: 2026-09-04
 | 场景 | 读哪个文件 |
 | --- | --- |
 | 本机进程/工具链/网络的完整坑案例与脚本 | `refs/01-pitfalls.md` |
-| 版本修改记录（v1.0.0 ~ v1.6.8） | `refs/02-changelog.md` |
+| 版本修改记录（v1.0.0 ~ v1.7.0） | `refs/02-changelog.md` |

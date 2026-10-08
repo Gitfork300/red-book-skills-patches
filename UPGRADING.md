@@ -1,476 +1,69 @@
-# 升级主 skill 后的 patch 处理指南
+# A2 更新评估与独立运行维护
 
-> 当 `aus666666/red-book-skills` 有新版本时，本指南说明如何安全地把上游改动与我们的 patch 合并。
+可信参考源为 [`Gitfork300/xiaohongshu-skills-A2`](https://github.com/Gitfork300/xiaohongshu-skills-A2)。
+此仓库的 `runtime/` 是可独立执行的 Windows 兼容运行层；A2 只用于可选的更新评估，不是运行依赖。
 
-## 总原则
+## 运行边界
 
-用户于 2026-09-12 定下的架构原则：
+- 发布、登录、搜索和互动使用本仓库 `runtime/scripts/`，不要求同级安装、不要求 Git remote，
+  日常运行不访问 GitHub。
+- Python 直接依赖只有 `requests` 和 `websockets`，通过 `tools/setup_runtime.py` 安装到仓库
+  `.venv/`。Chrome/Chromium 由本机提供。
+- 账号配置、登录态、Chrome Profile、稿件和运行状态均为本机数据，不进入仓库或跨设备复制。
 
-> **我们自己的更新放 patch，原始本体定期和 GitHub 同步。**
+## A2 与本地架构
 
-据此，两类东西必须分清：
+A2 使用模块化 `scripts/xhs/`、`skills/` 和浏览器扩展；本地运行层依赖
+`scripts/cdp_publish.py`、`scripts/publish_pipeline.py` 等兼容接口。不能把 A2 同名文件当作
+本地实现直接覆盖，也不能将 A2 克隆为运行目录。
 
-| | 位置 | 内容 | 谁维护 |
-| --- | --- | --- | --- |
-| **本体** | `~/.workbuddy/skills/red-book-skills/` | 上游代码 + 覆盖层的**应用产物** | 上游 + `core-overrides` apply |
-| **patch** | `~/.workbuddy/skills/red-book-skills-patches/` | 我们的**全部**定制 | 我们 |
+当前记录的 A2 基线：
 
-本体里有 4 个文件被我们改过，它们的**权威副本在 `core-overrides/overrides/`**。
-所以同步上游 = 覆盖本体 → `apply` 一次。
-
-本目录下的 `red-book-skills-upstream/` 只是上游只读备份，含原作者提示文件；
-它不属于 Patch，不参与加载，也不应提交到公开 Patch 仓库。不要把它复制进
-`core-overrides/overrides/`，否则会造成重复本体和加载歧义。
-
-> **不再需要人工逐条"把本地改动打回去"。** 旧版本文件里那张 22 条的迁移清单
-> 已被 `core-overrides` 机制取代，清单内容现在等价于覆盖层的 4 个文件（见
-> `core-overrides/SKILL.md` 的「覆盖清单」）。
-
-## 标准同步流程（照做即可）
-
-```bash
-PY=<解释器>   # 建议 <本体>/.venv/Scripts/python.exe
-P=~/.workbuddy/skills/red-book-skills-patches
-UP=<上游快照解压目录>      # 全程保留，第 2、3 步都要用
-
-# 0. 先看清上游改了什么、会不会和我们的覆盖撞车
-$PY $P/update-checker/helpers/update_check.py diff-local
-#    看到「覆盖层冲突检查」报 !! → 先停止，按「覆盖层冲突处理」合并
-
-# 0.5 新电脑或清理过运行时目录时，先恢复空目录结构
-$PY $P/tools/init_runtime.py
-#    只创建目录，不生成状态、业务数据或登录态
-
-# 1. 取上游快照（codeload，详见下节）—— 解压到 $UP 后别删
-
-# 2. 覆盖本体
-cp -r $UP/. "<本体>/"
-
-# 3. 推进上游基线 ← 不可省略，见「为什么必须先 rebase」
-$PY $P/core-overrides/helpers/apply_overrides.py rebase --from $UP --commit <新 sha>
-#    报「上游改动了被我们覆盖的文件」→ 先按「覆盖层冲突处理」合并，再继续
-
-# 4. 重新应用我们的覆盖
-$PY $P/core-overrides/helpers/apply_overrides.py status   # 预期全部 PRISTINE
-$PY $P/core-overrides/helpers/apply_overrides.py apply
-
-# 5. 同步后自检（契约 + 未吸收改动）
-$PY $P/tools/post_sync_check.py --upstream $UP             # 预期 OK，exit 0
-
-# 6. 跑自测 + 端到端
-<本体>/.venv/Scripts/python.exe -m pytest <本体>/tests/ -q
-
-# 7. 标记已读
-$PY $P/update-checker/helpers/update_check.py acknowledge --sha <新 sha>
-```
-
-### 为什么必须先 rebase（否则会污染覆盖层）
-
-`baseline.json` 存着「上游原版」的 sha256，`status` 靠它区分两种状态：
-
-| 本体现在是什么 | 判定 | 提示 |
-| --- | --- | --- |
-| 上游原版 | `PRISTINE` | 跑 apply |
-| 有人手改过 | `DRIFTED` | 把改动搬进 overrides |
-
-上游一更新，旧的 `upstream_sha256` 就失效了 —— 本体里是新上游内容，与
-override / 旧基线 / 上次 apply **三者都不匹配**，`status` 会把它判成 `DRIFTED`。
-
-照那条提示去做「把改动搬进 overrides」，等于**把上游新版当成我们的定制写进覆盖层**——
-覆盖层当场被污染，而且很难察觉。
-
-`rebase` 就是把基线推进到新的上游版本，让判定恢复正确。**每次覆盖本体后、apply 前必做。**
-
-> 安全护栏：不带 `--from` 时，若发现本体已 apply（本体 == 覆盖层），
-> 命令会**拒绝执行**并退出 2 —— 因为那种状态下读出来的是我们自己的版本，
-> 写进基线等于把覆盖层认成上游。
-
-### 自检脚本在查什么
-
-`tools/post_sync_check.py` 补上 `status/verify` 回答不了的两件事（详见
-「整文件覆盖的代价」）：
-
-- **契约检查**：`core-overrides/contracts.json` 列出我们依赖的上游符号。
-  上游若删改了它们，覆盖层 apply 照样成功，但**运行时才炸** —— 脚本提前报警。
-- **未吸收改动**：上游在我们锁死的文件里改了多少行，提醒人工评估是否要合并。
-
-脚本会区分「上游新改动」与「纯我们的定制」（后者不报警，避免告警疲劳）。
-
-## 本体已 git 化（2026-09-12）—— 但仍不能靠 `git pull` 同步
-
-`~/.workbuddy/skills/red-book-skills/` 现在**是** git 仓库，但用法与普通仓库不同：
-
-| | 值 |
+| 项目 | 值 |
 | --- | --- |
-| 分支 / HEAD | `main`，**恒等于纯上游基线**（建于 `b006891a`） |
-| 4 个覆盖产物 | 只停在工作区，**永远是未暂存 modified** —— 这是特性，一眼看到我们动了哪 4 个文件 |
-| `core.autocrlf` | **`true`** —— 本体文件是 CRLF、上游是 LF，必须归一化后比较，否则 19 个文件全部误报 modified |
-| remote `upstream` | 已配 `aus666666/red-book-skills.git`（**本机当前不可达**，见下） |
+| 分支 | `main` |
+| commit | `b043748282a57e347c52f517dfb59819121134ab` |
+| 日期 | `2026-05-23T16:14:35Z` |
+| 发布模块映射 | `scripts/xhs/publish.py`, `scripts/xhs/cdp.py`, `scripts/xhs/errors.py` |
 
-### ⚠️ 本机 `github.com` 的 git 端点不可达
+`core-overrides/baseline.json` 仅追踪 root `SKILL.md` 和已声明的 A2 对应模块哈希。
+未建立一对一映射的本地文件明确不可比较；检查结果不是可覆盖许可。
 
-2026-09-12 实测三通道：
+## 评估和移植步骤
 
-| 端点 | 走代理 `127.0.0.1:11455` | 直连 |
-| --- | --- | --- |
-| `api.github.com` | ✅ | ✅ |
-| `codeload.github.com`（tarball） | ✅ | ✅ |
-| **`github.com`（git 端点）** | ❌ 502 | ❌ 超时 |
+1. 运行 `update-checker` 查看 A2 最新提交；需要完整差异时将快照解压到临时目录。
+2. 对每个候选改动核对 A2 实际实现、本地行为、平台风险和当前测试；明确记录采纳、保留或拒绝。
+3. 已采纳改动先合并进 `core-overrides/overrides/`；没有覆盖层的受管文件则更新 bundled `runtime/`。
+4. 运行：
 
-所以 **`git fetch` / `git clone` / `git ls-remote` 全都用不了**。
-附带发现：`update-checker` 里那个 `git ls-remote` 兜底探测在本机**一直是失效的**，
-它实际只靠 GitHub API 在跑。
-
-**结论：上游快照只能走 `codeload` tarball**，同步的实质动作没有变化：
-
-```bash
-# 下载并解压上游
-curl -sL https://codeload.github.com/aus666666/red-book-skills/tar.gz/refs/heads/main -o /tmp/up.tgz
-mkdir -p /tmp/up && tar xzf /tmp/up.tgz -C /tmp/up
-
-# 覆盖本体（保留本体独有的 helpers/、config/accounts.json）
-cp -r /tmp/up/red-book-skills-main/. "<本体>/"
-
-# 立刻 apply 我们的覆盖
-$PY $P/core-overrides/helpers/apply_overrides.py apply
-```
-
-> 注意：覆盖只是"上游文件盖过来"，**不会删**本体里上游没有的文件
-> （我们的 `helpers/`、`config/accounts.json` 等本来就该保留）。
-
-### git 化在当前网络下提供了什么
-
-- ✅ `git status` —— 一眼看到我们改了哪 4 个文件
-- ✅ `git diff` —— 我们相对上游的改动
-- ✅ `git log` / `git checkout <sha> -- .` —— 版本记录与回退
-- ❌ `git fetch upstream` + `git diff HEAD upstream/main` —— **行级看上游改动，目前用不了**
-
-因此**上游差异对比仍以 `diff-local` 为准**。若将来 `github.com` 可达，
-升级为「fetch → diff → checkout → 推进基线 → apply」（见文末）。
-
-### ⚠️ git 化新增的误操作面
-
-本体有 `.git` 之后，这些命令会**一键抹掉覆盖产物**：
-
-```bash
-git checkout .          # 或 git reset --hard / git stash / git clean
-```
-
-兜底：`apply_overrides.py status` 会立刻报 `PRISTINE`，跑一次 `apply` 即恢复。
-
-**约定：本体仓库只保留"纯上游"的提交，永不 commit 覆盖产物** ——
-否则 HEAD 变成"上游+覆盖"混合体，`git diff` 就分不清谁改了哪行，git 化白做。
-
-## 覆盖层冲突处理（core-overrides）
-
-`diff-local` 会读 `core-overrides/baseline.json`，把**上游也改动过的被覆盖文件**标为冲突：
-
-```
-=== 覆盖层冲突检查（core-overrides/baseline.json）===
-  !! 上游改动了 1 个被我们覆盖的文件 —— 直接覆盖会丢上游改动：
-     SKILL.md
-       基线=68a233e80c20   上游当前=ab12cd34ef56
-     处置：把上游改动人工合并进 core-overrides/overrides/ 后再 apply
-```
-
-此时**不要直接覆盖本体**，否则上游这次改动就丢了。正确顺序：
-
-1. `diff-local` 看到上游版本，人工读上游改了什么
-2. 把上游改动**手工合并**进 `core-overrides/overrides/<文件>`
-   （即：让覆盖层 = 上游新版 + 我们的改动）
-3. `apply_overrides.py rebase --from $UP --commit <新 sha>`（推进上游基线，替代手工改 JSON）
-4. `apply_overrides.py apply`
-5. `tools/post_sync_check.py --upstream $UP` —— 确认契约还在、差异只剩我们的定制
-6. `update_check.py acknowledge --sha <新 sha>`
-
-## 整文件覆盖的代价（必读）
-
-`core-overrides` 的做法是**整份文件替换**，不是打 patch。这有个容易被忽略的代价：
-
-> **上游对我们覆盖的文件的后续改动，我们一份都拿不到。**
-> 文件被锁死在 `b006891a`（2026-08-27）那一版，直到有人手工合并。
-
-上游更新越频繁，这个窟窿越大。三个脚本当前的锁定规模：
-
-| 文件 | 我们的改动 | 被锁住的上游内容 |
-| --- | --- | --- |
-| `scripts/cdp_publish.py` | +93 / -7 | 整个 6116 行文件的其余全部 |
-| `scripts/chrome_launcher.py` | +21 / -5 | 同上 |
-| `scripts/publish_pipeline.py` | +106 / -0 | 同上 |
-| `SKILL.md` | 整篇重写 | 上游骨架（**100% 冲突属预期，不是异常**） |
-
-应对三条：
-
-1. **每次同步必跑 `post_sync_check.py --upstream $UP`** —— 它会报出上游在我们
-   锁死的文件里改了什么，以及我们依赖的符号是否还在（`contracts.json`）
-2. **改动面最小的文件优先合并上游** —— `chrome_launcher.py` 只有 +21 行，
-   重做成本最低；`cdp_publish.py` 改动嵌在类方法里，合并要最小心
-3. **长期可考虑降级为「最小侵入」** —— 用 wrapper 脚本 import 上游模块后做猴子补丁，
-   而不是整文件替换，这样上游文件保持原样、更新自动生效。
-   **当前不实施**：三个脚本都是 CLI 入口，包装需要改调用链，风险高于收益。
-   若上游开始高频更新 `scripts/`，再重新评估。
-
-`contracts.json` 里每个文件都记了两类东西，改覆盖层时要同步维护：
-
-| 字段 | 含义 | 何时更新 |
-| --- | --- | --- |
-| `we_add` | 我们注入的特征串 | 改动特征串时 |
-| `upstream_anchors` | **我们调用的上游符号** | 新增对上游函数/常量的依赖时 |
-
-漏了 `upstream_anchors` 的后果：上游删掉该符号时，自检不会报警，覆盖层静默失效。
-
-## 三种更新场景与对应处理
-
-### 场景 A：更新只影响文档/示例
-
-典型：README 调整、注释更新。
-
-处理：走**标准同步流程**即可。注意 `SKILL.md` 在覆盖清单里，
-所以覆盖后必须 `apply`，否则所有 patch 规则会失效。
-
-### 场景 B：更新改了 `scripts/` 但签名兼容
-
-典型：内部重构、性能优化、修了某个边缘 bug。**这类最需要小心**——
-`cdp_publish.py` / `chrome_launcher.py` / `publish_pipeline.py` 三个都在覆盖清单里。
-
-处理：
-
-1. `diff-local` + 逐文件看上游 diff
-2. 若上游改的就是我们覆盖过的区域 → 按「覆盖层冲突处理」合并进 `overrides/`
-3. `apply` → 跑自测：
-
-   ```bash
-   <本体>/.venv/Scripts/python.exe -m pytest <本体>/tests/ -q
+   ```powershell
+   .\.venv\Scripts\python.exe core-overrides\helpers\apply_overrides.py apply --dry-run
+   .\.venv\Scripts\python.exe core-overrides\helpers\apply_overrides.py apply
+   .\.venv\Scripts\python.exe core-overrides\helpers\apply_overrides.py verify
+   .\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"
+   .\.venv\Scripts\python.exe tools\ensure_compatible.py --refresh
+   .\.venv\Scripts\python.exe tools\check_doc_layers.py
    ```
-4. `acknowledge --sha`
 
-### 场景 C：更新含 BREAKING
+5. 确认全部通过后才更新 baseline/mapping、版本与修改记录，并 acknowledge 上游 commit。
 
-典型：`--content-declaration` 取值变了；`verify-note` 改名/删除；`SELECTORS` 重写。
+**禁止**把 A2 快照传给 `apply_overrides.py rebase --from` 或
+`tools/post_sync_check.py --upstream`。这两个旧布局工具需要同路径文件；A2 不满足输入契约。
+不得用整仓复制、`git pull`、`checkout` 或 `reset` 更新本地运行层。
 
-处理：
+## 已移植的 A2 改进
 
-1. **不要立即覆盖**。先读上游 README/CHANGELOG（或 `diff-local` 看 diff）
-2. 对照 `patches/*/META.json` 的 `conflict_points` 与下方「冲突点检查清单」
-3. 改覆盖层：把兼容性适配写进 `core-overrides/overrides/` 对应文件
-4. 覆盖本体 → `apply` → 端到端测试（登录 → 发布 → verify → record）
-5. 更新各 patch 的 `applies_to_main_version` 与 `version`，`acknowledge --sha`
+- 发布页 tab 定位过滤 `data-hp-kind`/`button-hp-installed` 蜜罐节点，优先使用可信绑定节点，
+  并验证可见和 active 状态；仅在上传区已就绪时兼容回退。
+- 明确识别 `-9130` 至 `-9140` 风控响应及相关限制消息，保留精确发布响应校验和标题回查。
+- 未移植页面内 fetch/XHR/console/MutationObserver 多层 hook；当前实现直接使用 CDP Network
+  响应验证，侵入性更低且发布成功判据更严格。
+- 未替换现有 `run_lock.py`；本地跨平台内核锁实现避免了旧式文件锁竞态。
 
-## 冲突点检查清单（按 patch 分组）
+对应实现位于 `core-overrides/overrides/scripts/cdp_publish.py`；回归用例位于 `tests/`。
 
-| Patch | 检查项 |
-| --- | --- |
-| `core-overrides` | **本体 4 个文件的覆盖是否仍适用**：`cdp_publish.py` 的发布按钮选择器与 `SELECTORS` 结构、`chrome_launcher.py` 的启动函数签名、`publish_pipeline.py` 的 CLI 参数、`SKILL.md` 的章节结构 |
-| `windows-sandbox-workaround` | `scripts/cdp_publish.py` 的 `--title / --content-file / --images / --content-declaration / --reuse-existing-tab` 参数；CDP `Browser.close` 行为；tag attach 机制 |
-| `publish-interval-guard` | 不依赖主 skill 代码（纯本地落盘）；但依赖 `publish_pipeline.py` 调用它的 hook（在覆盖层里） |
-| `cover-image-rules` | `publish` 是否支持 `--content-declaration`；声明文案枚举是否变化 |
-| `writing-facts-only` | 纯内容策略，与代码无关 |
-| `publish-loop-guard` | 纯流程编排 + 只读复核；只依赖稿件目录与发布日志的路径约定 |
-| `update-checker` | 纯本地状态；`diff-local` 依赖上游仓库结构（顶层需有 `SKILL.md`） |
-| `timeliness-window` | 纯本地判断 + 网络检索 |
-| `publish-preflight-guard` | 汇总各 patch 的检查项，项数随其它 patch 变化 |
-| `safe-wording-guard` | 纯文本检查 |
+## 本机快照备份
 
-## 自动化检查
-
-`update-checker` 已注册每周五 10:00 自动检查（automation id `7d437f5c`）。
-
-> **⚠️ 间隔必须小于触发周期，否则检查会被静默跳过。**
-> `check` 在「距上次 < interval」时直接 `exit 0` 且**不写状态** ——
-> 所以「每周触发 + 间隔 ≥ 7 天」会退化成约**每两周才真检查一次**，
-> 而且从外面看不出区别（退出码同样是 0）。
->
-> **当前配置**：`interval_sec = 432000`（**5 天**），触发为每周五 10:00。
-> 为什么不是 6 天：触发周期是 7 天，间隔取 6 天时余量只有 1 天，
-> 一旦有人在周四晚或周五上午手工跑过 `check`，`last_check` 被推后，
-> 下个周五触发时距它不足 6 天 → **那次静默跳过**。2026-09-14 实测就处于临界：
-> 上次 09-12 09:36，下次触发 09-18 10:00，只多出 **23 分钟**。
-> 取 5 天后，最坏情况（手工检查恰好卡在 automation 前 1 分钟）仍有约 2 天余量。
->
-> 一句话：**间隔要显著小于触发周期，别贴着设。**
->
-> 自检：`update_check.py status` 看 `interval` 与「下次检查」两个字段。
->
-> 副作用：手工跑一次 `check` 会把 `last_check` 推后，若紧接着的那个周五
-> 距它不足 6 天，automation 那次会**静默跳过**。所以手工查完最好看一眼
-> `status` 的「下次检查」是否仍在预期窗口内。
-
-检测到更新后：
-
-1. agent 转告 `UPDATE_AVAILABLE` 段
-2. 跑 `diff-local` 看上游实际改了什么 + 覆盖层是否冲突
-3. 按 A/B/C 场景处理
-4. `acknowledge --sha` 标记
-
-## 跨机器同步 patch
-
-patch 目录自包含，可整包跨机器同步。**patches 已于 2026-09-12 git 化**（本地仓库、无 remote），
-因此迁移也可用 `git bundle create patches.bundle --all` 或直接 clone，不再只能打 tar。
-
-```bash
-# 源机器
-tar -czf patches.tgz -C ~/.workbuddy/skills red-book-skills-patches
-
-# 目标机器
-tar -xzf patches.tgz -C ~/.workbuddy/skills
-python <patch>/core-overrides/helpers/apply_overrides.py apply   # 新机器上必须执行
-```
-
-注意：
-
-- `state/` 下是运行期状态（`publish_log.json` / `update_state.json` / `applied.json`），
-  可以一起带；建议在新机器上 reset 发布日志避免历史污染
-- **新机器上一定要 `apply`**，否则本体没有我们的改动，发布可靠性修复不生效
-
-## 版本备份（防丢失）
-
-两个仓库都是"手工维护的现场"—— 误删、误改、覆盖半途失败都会造成版本丢失。
-`tools/backup_snapshots.py` 定期把**工作区**打成快照：
-
-```bash
-PY=<托管 python>
-$PY $P/tools/backup_snapshots.py                                # 备份（无变化则跳过）
-$PY $P/tools/backup_snapshots.py --list                         # 看快照 + 告警状态
-$PY $P/tools/backup_snapshots.py --restore <快照> --target <目录>  # 恢复到指定目录
-```
-
-产物在 `~/Documents/red-book-skills-backup/snapshots/<时间戳>_<指纹>/`，含
-`body.tar.gz`（本体）+ `patches.tar.gz`（补丁仓）+ `META.json`（两仓 git HEAD、指纹、体积）。
-
-**为什么不用 git bundle 就够了**：git 只管已跟踪且已提交的内容。本体里
-`helpers/README.md`、`scripts/xhs_publish_fail.png` 是**未跟踪**的，4 个覆盖产物是**未提交**的
-—— 这四类恰恰是最容易丢的。快照把 `.git` 一并打进包，解压即得"带完整历史的完整工作区"。
-
-- 内容指纹去重（与上一份相同不留新份）；默认保留最近 30 份
-- 排除可重建项：`.venv/ tmp/ __pycache__/ .pytest_cache/`、`core-overrides/state/backup/`
-- `config/accounts.json`（凭据）默认不纳入备份
-- 单份约 0.8 MB，已挂**每日 10:00** 自动化任务
-
-### 备份失败怎么被发现
-
-失败时会留下**两处**告警，存在即代表"最近一次备份没成功"：
-
-| 位置 | 文件 |
-| --- | --- |
-| `~/Documents/red-book-skills-backup/` | `FAILED.txt`（阶段 + 完整 traceback） |
-| 桌面 | `!!备份失败-red-book-skills.txt`（摘要 + 处理步骤） |
-
-**备份成功或检测到内容无变化时，两者都会被自动删除** —— 所以告警不会"粘住"。
-恢复命令：
-
-```bash
-$PY $P/tools/backup_snapshots.py --force        # 修好原因后重跑
-```
-
-## 故障排查
-
-| 现象 | 原因 | 处理 |
-| --- | --- | --- |
-| `git fetch upstream` 报 502 / 连接超时 | 本机 `github.com` git 端点不可达 | 改用 `codeload` tarball 覆盖（见「本体已 git 化」一节） |
-| `git status` 显示十几个文件全 modified | `core.autocrlf` 被设成了 `false` | `git config core.autocrlf true` 后重看 |
-| 覆盖产物"不见了"（`git status` 变干净） | 误跑 `git checkout .` / `reset --hard` / `stash` | `apply_overrides.py status` 会报 `PRISTINE`，跑 `apply` 恢复 |
-| `apply_overrides.py status` 报 `DRIFTED` | 有人直接改了本体；**或刚同步过上游但没 rebase** | 后者是误报 —— 先跑 `rebase --from $UP`，再 `status`；确认不是刚同步才按"手改"处理 |
-| `apply_overrides.py status` 报 `PRISTINE` | 刚覆盖过本体还没 apply | 跑 `apply` |
-| `rebase` 拒绝执行（退出 2） | 本体已 apply，读不出上游原版 | 加 `--from <上游快照目录>`；或先用上游快照覆盖本体 |
-| `post_sync_check.py` 报 BREAKING | 上游删改了我们依赖的符号 | 按提示改 `overrides/` 对应文件适配；改完同步更新 `contracts.json` |
-| `post_sync_check.py` 退出 1（未吸收改动） | 上游改了我们锁死的文件 | 读上游 diff，把与我们无关的改动合并进覆盖层（见「整文件覆盖的代价」） |
-| `diff-local` 报覆盖层冲突 | 上游也改了被覆盖文件 | 按「覆盖层冲突处理」合并，**别直接覆盖** |
-| patch helper 报 `ModuleNotFoundError` | 主 skill 重装后 `.venv` 没了 | `cd <本体> && .venv/Scripts/python.exe -m pip install -r requirements.txt` |
-| `verify-note` 找不到精确标题 | 主 skill 改了 `SELECTORS` | 查覆盖层 `overrides/scripts/cdp_publish.py` 与上游差异 |
-| 间隔守卫报"未到间隔"但实际已过 | 时钟漂移 / 状态被外部改 | 查 `state/publish_log.json`；reset 后重新 record |
-| update_check 报 `rate_limited` | GitHub API 限流 | 等冷却；本 patch 用 cooldown 抑制重复提醒 |
-| 桌面出现 `!!备份失败-red-book-skills.txt` | 定期备份失败，期间的改动无备份保护 | 看其中摘要或同目录 `FAILED.txt` 的 traceback，修好后 `backup_snapshots.py --force`；成功后告警自动消失 |
-| 想确认"到底有没有备份上" | —— | `backup_snapshots.py --list`：看快照列表 + 两处告警状态 |
-| 备份脚本报"未采集到任何文件" | 本体/补丁仓路径变了 | 改脚本顶部 `BODY` / `PATCH` 常量 |
-
-## 本体 git 化的现状与维护
-
-本体已于 **2026-09-12 git 化**。建库方式（记录备查）：
-
-```bash
-cd <本体>
-git init -b main
-git config core.autocrlf true      # ⚠️ 不能设 false，否则 CRLF/LF 会让 19 个文件全报 modified
-git remote add upstream https://github.com/aus666666/red-book-skills.git
-
-# 本机 github.com git 端点不可达，故用 codeload 取快照：
-# 在临时目录做成"上游快照仓库"，再本地 fetch（不走网络）
-<下载 tarball 并解压到 /tmp/up>
-git -C /tmp/up init -b main && git -C /tmp/up add -A && git -C /tmp/up commit -m "upstream snapshot"
-
-# 锚定纯上游：read-tree 只填索引，工作区一个字节都不动
-git fetch /tmp/up HEAD
-git read-tree FETCH_HEAD
-git commit -m "baseline: upstream main @ <sha>"
-```
-
-结果：`HEAD` = 纯上游；4 个覆盖产物 = 未暂存 modified；`git status` 恒不干净（**预期如此**）。
-
-### 建基线前务必校验快照
-
-下载的 tarball 必须与 `core-overrides/baseline.json` 记录的 `upstream_sha256`
-（行尾归一化后）**逐项比对，四项全 MATCH 才能用来建基线** ——
-否则基线本身可能是被污染的。
-
-### 若将来 `github.com` 可达，同步流程升级为
-
-```bash
-git fetch upstream
-git diff HEAD upstream/main --stat     # 精确看上游改了哪些行
-git checkout upstream/main -- .        # 工作区变成新上游（覆盖产物被冲掉，正常）
-git add -A && git commit -m "baseline: upstream <新 sha>"   # 推进基线
-$PY $P/core-overrides/helpers/apply_overrides.py apply      # 重新叠回我们的覆盖
-```
-
-⚠️ `checkout` 与 `commit` 的**顺序不能颠倒**：先 checkout 再 commit，基线才是纯上游；
-若先 apply 再 commit，HEAD 又变成混合体了。
-
-### 凭据
-
-上游的 `.gitignore` 已排除 `.venv/`、`tmp/`、`config/accounts.json`（含凭据）。
-建库后核对一次 `git ls-files` —— 应当**只**出现上游的
-`config/accounts.json.example`，真实凭据绝不能进库。
-
-## 修改记录
-
-- v1.10.1 (2026-09-14) 修正「自动化检查」间隔：
-  - 文档写着"实际每两周才查一次、若要每周必查请改 518400"，但**间隔早就是 518400 了**
-    —— 照文档去改等于白改。改为说明「间隔必须 < 触发周期」的原理
-  - **并把 6 天改为 5 天（432000）**：6 天时余量只有 1 天，实测下次触发仅多出 23 分钟，
-    手工检查稍晚就会让那次周五静默跳过；5 天时最坏情况仍有约 2 天余量
-  - 补「手工跑 check 会推迟自动检查」的副作用说明
-- v1.10.0 (2026-09-14) **应对主体不定期更新**：新增 `apply_overrides.py rebase`
-  （推进上游基线，替代手工改 `baseline.json`，带"已 apply 则拒绝"护栏）；
-  新增 `core-overrides/contracts.json` + `tools/post_sync_check.py`（契约自检 +
-  BREAKING 探测 + 未吸收改动统计，能区分"上游新改动"与"纯我们的定制"）；
-  新增「整文件覆盖的代价（必读）」；标准同步流程插入 rebase/自检两步；
-  故障排查表补 4 条
-- v1.9.0 (2026-09-12) **新增「版本备份（防丢失）」**：`tools/backup_snapshots.py` 对本体与
-  补丁仓的**工作区**做快照（含 `.git`、未跟踪文件、未提交的覆盖产物），落到
-  `~/Documents/red-book-skills-backup/`；指纹去重、保留 30 份、单份约 0.8 MB，
-  已挂每日 10:00 自动化。失败双告警（备份目录 `FAILED.txt` + 桌面
-  `!!备份失败-red-book-skills.txt`，成功自动清除）；故障排查表补 3 条
-- v1.8.0 (2026-09-12) **本体 git 化**（用户下达"本体请同步git化"）：基线提交 `8f3e151`，
-  HEAD 恒等于纯上游 `b006891a`，4 个覆盖产物只停在工作区（未暂存 modified）；
-  `core.autocrlf=true`（本体 CRLF / 上游 LF，设 false 会让 19 个文件全误报）。
-  **实测本机 `github.com` git 端点不可达**（走代理 502 / 直连超时）→ `git fetch` / `ls-remote`
-  均不可用，快照只能走 `codeload`，故上游差异对比仍以 `diff-local` 为准。
-  重写「本体不是 git 仓库」→「本体已 git 化（仍不能靠 git pull 同步）」；
-  「可选：让本体成为 git 仓库」→「现状与维护」（含建基线前的 sha256 校验要求、
-  网络恢复后的升级流程、checkout/commit 顺序警示、凭据核对）；
-  故障排查表补 3 条（fetch 502 / autocrlf 误设 / 覆盖产物被抹）
-- v1.7.0 (2026-09-12) 适配 `core-overrides` 架构：**删除 22 条人工迁移清单**（由覆盖层接管）；
-  修正失效的 `git pull` 指令（本体无 `.git`）；新增「标准同步流程」「覆盖层冲突处理」
-  「可选：让本体成为 git 仓库」；补 `check` 间隔导致实际约两周才查一次的说明
-- v1.6.3 (2026-09-11) 迁移清单追加：`safe-wording-guard` **裸域名 P0**（正文不出现网址/域名，来源改写成
-  「机构名+项目名+论文编号」）；`publish-loop-guard` 复核范围收窄为「最近几日 + 第一页」
-- v1.6.2 (2026-09-11) 迁移清单追加：`publish-loop-guard` 新增**按事件查重**（`dup_check.py`），
-  `publish-preflight-guard` 第 1 项「选题查重」口径由「标题字面」改为「事件标识」
-- v1.6.1 (2026-09-11) `windows-sandbox-workaround` 新增「网络可达性」判定与 `net_probe.py`；`publish-preflight-guard` 项数 14→**15**（新增「网络可达性」，发布前必做 TLS 握手探测）
-- v1.6.0 (2026-09-11) 迁移清单追加：地域范围闸门（会展活动只发江浙沪/珠三角，`geo_check.py`），`timeliness-window` 用途与 `publish-preflight-guard` 项数（13→14）同步
-- v1.5.0 (2026-09-11) 迁移清单追加 3 条：「启动」触发词自动检索发布、每 30 分钟漏发复核、选题配额（台风每日 ≤1）；冲突清单新增 `publish-loop-guard`
-- v1.4.0 (2026-09-11) 迁移清单追加：`SKILL.md` 间隔描述改为「8~12 分钟随机」+ `wait --max-block 900`；间隔守卫检查项补 max-block ≥ 720 提醒
-- v1.3.0 (2026-09-11) 迁移清单追加：`SKILL.md` 第 2 步扩为「时效窗口 与 可发布资格」（`--live` / `--public-signup`、退出码 3）、patch 表格 11→12 项
-- v1.2.0 (2026-09-11) 迁移清单追加：`SKILL.md` 流程新增第 2 步「时效窗口」（`timeliness-window`），原 2–11 顺延为 3–12
-- v1.1.0 (2026-09-11) 迁移清单追加 3 条 `SKILL.md` 本地改动（patch 表格、标题 20 字、发布流程增补）
-- v1.0.0 (2026-09-04) 初版
+`tools/backup_snapshots.py` 用于备份 bundled runtime 和 Patch 工作区；它不备份 Chrome Profile、
+Cookie 或 `runtime/config/accounts.json`。备份写入 `~/xhs-workspace/_skill-backup/`，
+保留策略和告警见脚本头部说明。不要把生成的快照放进技能树或提交到公开仓库。

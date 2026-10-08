@@ -34,11 +34,11 @@
   2 = 参数或环境错误
 
 环境变量：
-  XHS_WORKSPACE      工作区根目录（换机器必设），默认 ~/Documents/workbuddy-skill
+  XHS_WORKSPACE      工作区根目录（换机器必设），默认 ~/xhs-workspace
   XHS_DRAFT_DIR      稿件目录，默认 <workspace>/xhs_publish
   XHS_INTERVAL_LOG   发布日志，默认 <patches>/publish-interval-guard/state/publish_log.json
   XHS_PENDING_POOL   待发池，默认 <patches>/timeliness-window/state/pending_pool.json
-  XHS_SKILL_DIR      主 skill 目录（--verify 用），默认 <skills>/red-book-skills
+  XHS_SKILL_DIR      运行层目录（--verify 用），默认本仓库 runtime/
 """
 import argparse
 import json
@@ -54,7 +54,7 @@ PATCH_ROOT = os.path.normpath(os.path.join(HERE, ".."))          # <patch>/publi
 PATCHES_ROOT = os.path.normpath(os.path.join(PATCH_ROOT, ".."))  # <skills>/red-book-skills-patches
 SKILLS_ROOT = os.path.normpath(os.path.join(PATCHES_ROOT, ".."))
 
-WS_DEFAULT = os.environ.get("XHS_WORKSPACE") or os.path.expanduser("~/Documents/workbuddy-skill")
+WS_DEFAULT = os.environ.get("XHS_WORKSPACE") or os.path.expanduser("~/xhs-workspace")
 DRAFT_DIR = os.environ.get("XHS_DRAFT_DIR") or os.path.join(WS_DEFAULT, "xhs_publish")
 LOG_PATH = os.environ.get("XHS_INTERVAL_LOG") or os.path.join(
     PATCHES_ROOT, "publish-interval-guard", "state", "publish_log.json"
@@ -62,7 +62,11 @@ LOG_PATH = os.environ.get("XHS_INTERVAL_LOG") or os.path.join(
 POOL_PATH = os.environ.get("XHS_PENDING_POOL") or os.path.join(
     PATCHES_ROOT, "timeliness-window", "state", "pending_pool.json"
 )
-SKILL_DIR = os.environ.get("XHS_SKILL_DIR") or os.path.join(SKILLS_ROOT, "red-book-skills")
+SKILL_DIR = (
+    os.environ.get("XHS_SKILL_DIR")
+    or os.environ.get("RED_BOOK_SKILLS_ROOT")
+    or os.path.join(PATCHES_ROOT, "runtime")
+)
 
 INFLIGHT = os.path.join(PATCH_ROOT, "state", "inflight.json")
 ABANDONED = os.path.join(PATCH_ROOT, "state", "abandoned.json")
@@ -171,9 +175,13 @@ def _scan_titles(scan_dir, days, keys, skip_files=None):
 
 def _verify_on_platform(title, timeout=90):
     """返回 True/False/None（None = 无法核验）。"""
-    py = os.path.join(SKILL_DIR, ".venv", "Scripts", "python.exe")
-    if not os.path.isfile(py):
-        return None
+    py = os.environ.get("RED_BOOK_SKILLS_PYTHON")
+    if not py:
+        candidates = (
+            os.path.join(PATCHES_ROOT, ".venv", "Scripts", "python.exe"),
+            os.path.join(PATCHES_ROOT, ".venv", "bin", "python"),
+        )
+        py = next((candidate for candidate in candidates if os.path.isfile(candidate)), sys.executable)
     try:
         r = subprocess.run(
             [py, "scripts/cdp_publish.py", "verify-note",

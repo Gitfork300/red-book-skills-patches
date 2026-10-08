@@ -29,7 +29,7 @@
   2 = 环境错误（Chrome 未起 / 登录失效 / 依赖缺失）
 
 环境变量：
-  XHS_SKILL_DIR   主 skill 目录，默认 <skills>/red-book-skills
+  XHS_SKILL_DIR   运行层目录，默认本仓库 runtime/
   XHS_CDP_HOST / XHS_CDP_PORT   默认 127.0.0.1 / 9222
 """
 from __future__ import annotations
@@ -46,7 +46,11 @@ PATCH_ROOT = os.path.normpath(os.path.join(HERE, ".."))          # <patch>/publi
 PATCHES_ROOT = os.path.normpath(os.path.join(PATCH_ROOT, ".."))  # <skills>/red-book-skills-patches
 SKILLS_ROOT = os.path.normpath(os.path.join(PATCHES_ROOT, ".."))
 
-SKILL_DIR = os.environ.get("XHS_SKILL_DIR") or os.path.join(SKILLS_ROOT, "red-book-skills")
+SKILL_DIR = (
+    os.environ.get("XHS_SKILL_DIR")
+    or os.environ.get("RED_BOOK_SKILLS_ROOT")
+    or os.path.join(PATCHES_ROOT, "runtime")
+)
 SKILL_SCRIPTS = os.path.join(SKILL_DIR, "scripts")
 
 HOST = os.environ.get("XHS_CDP_HOST", "127.0.0.1")
@@ -54,7 +58,7 @@ PORT = int(os.environ.get("XHS_CDP_PORT", "9222"))
 
 
 def _ensure_venv_runtime() -> None:
-    """cdp_publish 依赖装在 skill 的 .venv 里；用错解释器就换过去重跑一遍。
+    """cdp_publish 依赖装在 Patch 的 .venv 里；用错解释器就换过去重跑一遍。
 
     注意：Windows 上 os.execv 会丢掉父 shell 已接管的标准输出，
     表现为"退出码 0 但没有任何输出"，所以这里用 subprocess 转发。
@@ -66,13 +70,17 @@ def _ensure_venv_runtime() -> None:
         return
     except Exception:
         pass
-    venv_py = os.path.join(SKILL_DIR, ".venv", "Scripts", "python.exe")
-    if not os.path.isfile(venv_py):
-        venv_py = os.path.join(SKILL_DIR, ".venv", "bin", "python")
+    venv_py = os.environ.get("RED_BOOK_SKILLS_PYTHON")
+    if not venv_py:
+        candidates = (
+            os.path.join(PATCHES_ROOT, ".venv", "Scripts", "python.exe"),
+            os.path.join(PATCHES_ROOT, ".venv", "bin", "python"),
+        )
+        venv_py = next((candidate for candidate in candidates if os.path.isfile(candidate)), sys.executable)
     if os.path.isfile(venv_py) and os.path.abspath(sys.executable) != os.path.abspath(venv_py):
         r = subprocess.run([venv_py, os.path.abspath(__file__)] + sys.argv[1:])
         sys.exit(r.returncode)
-    raise SystemExit("找不到可用的运行环境：cdp_publish 导入失败，且 .venv 不存在")
+    raise SystemExit("cdp_publish 导入失败；请先运行 tools/setup_runtime.py")
 
 
 def fetch_first_page():

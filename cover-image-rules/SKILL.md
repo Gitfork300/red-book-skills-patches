@@ -1,11 +1,11 @@
 ---
 name: cover-image-rules
 system: publish
-version: 1.6.0
+version: 1.7.0
 patch_for: red-book-skills
 applies_to_main_version: ">=0.1.0"
 priority: 50
-author: Eric (定制)
+author: Project maintainers
 created: 2026-09-04
 ---
 
@@ -22,6 +22,8 @@ created: 2026-09-04
 4. AI 生成图必须传 `--content-declaration`；官方实拍不传。混用按含 AI 处理。
 5. 台风、暴雨、地震、事故等紧急事件不得生成伪造实拍；使用一眼可识别的矢量示意图，并注明“封面为 AI 生成示意图，不代表真实云图或现场情况”。
 6. 真实感或官方图仍需人工检查年份、人物、地图、文字和主题匹配；调用成功不等于文件已落盘，必须核对数量和文件名。
+7. **不得拉伸源图**；裁切须保留主体与关键信息，横幅/官方 KV 按完整缩放加背景延伸适配画布。
+8. 每段可见标题/角标只由一个公共绘制入口负责；单图函数不得再次绘制相同文案。生成后逐张检查有无重影、变形、遮挡和素材错配。
 
 ## 官方图与构图
 
@@ -46,4 +48,3 @@ python <patch>/cover-image-rules/helpers/check_cover_source.py --batch-dir <稿�
 | 场景 | 读哪个文件 |
 | --- | --- |
 | 官方图抓取、contact sheet、竖版适配、PIL/生图细节 | `refs/01-detail.md` |
-

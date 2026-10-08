@@ -119,62 +119,22 @@ L0 里固定一张表，每行 = 一个 L1 文件 + `read_when` 触发条件：
 **下一步**：把待拆项**逐条加进 `doc_layers.json`**（加了才会被校验器管）。
 未纳入前改这些文件，须**手工核对字数与行数**。
 
-## 八、主体（上游）更新时怎么办
+## 八、A2 更新评估与独立运行
 
-> 前提：skill = **主体**（上游 `aus666666/red-book-skills`，不定期更新）+ **patch**（我们）。
-> 架构铁律是「我们的更新放 patch，主体定期同步」——
-> 所以分层改造**不能以让主体更新变痛为代价**。本节就是为此设的。
+当前 skill 的脚本、规则和参考文档均随本仓库分发，不依赖同级安装或 A2 在线服务。
+A2 仓库使用不同目录/接口，更新只作择优评估，不能整仓替换。
 
-### 分层引入的三条新风险
+1. 用 `update-checker` 记录 A2 版本并查看差异清单；结构差异不代表文件可直接复制。
+2. 审核具体实现和本地 contracts，确定是否优于当前方案；批准后移植到 `runtime/` 或
+   `core-overrides/overrides/`。
+3. 本次已采纳发布页 tab 蜜罐过滤、active 状态确认和 `-913x` 风控分类，落在
+   `runtime/scripts/cdp_publish.py` 的权威覆盖层并有回归测试。
+4. A2 没有本地运行层的同路径接口；禁止把 A2 快照交给旧布局 `rebase` 或
+   `post_sync_check.py --upstream`，也禁止整仓覆盖。
+5. 更新后执行 `apply`、`verify`、运行测试、`ensure_compatible.py --refresh` 和
+   `check_doc_layers.py`。
 
-| 风险 | 机制 | 后果 |
-| --- | --- | --- |
-| **覆盖层持有上游副本** | 把上游的命令/流程段落复制进 `overrides/references/`，apply 时写进本体 | 主体更新后 `apply` 会把**旧快照**覆盖回去 ＝ **回退上游改动** |
-| **主入口整篇重写** | 主入口由我们重写而非"上游 + 增量" | 与上游 diff 变成"几乎全变"，冲突检测失去信号（恒报警） |
-| **引用断链** | 主入口引用了只存在于 patch 侧的文件 | 主体被覆盖后读不到 |
-| **基线不刷新** | 覆盖本体后没推进 `baseline.json` 的上游基线 | `status` 把新上游判为 `DRIFTED`「疑似手改」，**照提示操作会把上游新版写进覆盖层**（污染） |
-
-### 三条原则
-
-1. **覆盖层最小化 —— 不持有上游副本。**
-   上游的东西（命令、流程、参数、选择器）一律**指向上游文档**（如本体 `README.md`），
-   不复制。判据：**这段代码上游会不会改？会 → 就不该进 `overrides/`。**
-2. **每段标来源。** 每个 `references/*.md` 头部写
-   `source: patch`（我们的）/ `mixed`（混合）/ `upstream`（上游，应改为引用而非副本）。
-   主体更新时只核对 `mixed`。
-3. **主入口结构稳定。** 章节骨架定下来就别老动，减少与上游的无谓 diff。
-
-### 主体更新后的核对步骤
-
-1. **同步 + 看冲突**
-   `update_check.py diff-local` → 列出被上游改过的覆盖文件。
-   ⚠️ `SKILL.md` **恒冲突属预期**（我们整篇重写过），重点看 3 个 `scripts/*.py`。
-2. **推进基线（不可省）**
-   `apply_overrides.py rebase --from <上游快照目录> --commit <新 sha>`
-   → 让 `status` 恢复正确判定。漏这步会把新上游误判为 `DRIFTED`，见上表第四条。
-3. **按来源标记过一遍**
-
-   | 标记 | 动作 |
-   | --- | --- |
-   | `source: patch` | 不用动 |
-   | `source: mixed` | 看上游那段是否变了，变了就合进对应段落 |
-   | 指向上游文档（如 `README.md`） | **不用动，自动最新** |
-
-4. **上游新增了客观能力**（新命令 / 新参数 / 新选择器）→ 补进 `references/` 对应文件并标 `mixed`
-5. **应用 + 自检** → `apply` → `verify`
-   → `tools/post_sync_check.py --upstream <快照目录>`（契约 + BREAKING 探测）
-   → `check_doc_layers.py`（字数/断链/锚点）
-
-### 当前覆盖层内容清单（主体更新时照此核对）
-
-| 文件 | 来源 | 要动吗 |
-| --- | --- | --- |
-| `overrides/SKILL.md`（主入口） | patch（重写） | 上游若改发布流程 → 同步到 `01` |
-| `references/01-publish-flow.md` | patch | 一般不动；上游改流程时核对 |
-| `references/03-constraints.md` | mixed | 看「运行时与解释器」一节 |
-| `references/04-pitfalls.md` | patch | 不动 |
-| `references/05-patches-upstream.md` | patch | 不动 |
-| `scripts/cdp_publish.py` 等 3 个 | patch | 上游若改同文件需人工合并 |
+详细步骤只维护在 [`UPGRADING.md`](./UPGRADING.md)。
 
 ## 九、拆分后自查（防「拆着拆着规则没了」）
 
@@ -182,7 +142,8 @@ L0 里固定一张表，每行 = 一个 L1 文件 + `read_when` 触发条件：
 且**锚点只覆盖声明过的词** —— 未声明的内容被挪走，机器**不会报**。所以必须人工过一遍：
 
 1. **三版对照**
-   - 拆分前：`core-overrides/state/backup/<时间戳>/SKILL.md`（每次 `apply` 自动留）
+   - 拆分前：`~/xhs-workspace/_skill-backup/core-overrides-preapply/<时间戳>/SKILL.md`
+     （每次 `apply` 自动留；2026-10-07 起移出技能树，原因见 core-overrides/SKILL.md）
    - 拆分后：主入口 + 全部 `references/*.md` **拼接后**统计
    - 上游原版：`git show HEAD:SKILL.md`
 2. **关键词计数对照**：列 50–60 个「规则实体词」（阈值、命令名、禁用词、参数名、
@@ -199,6 +160,9 @@ L0 里固定一张表，每行 = 一个 L1 文件 + `read_when` 触发条件：
 
 ## 十、修改记录
 
+- v1.2.0 (2026-10-08) 将 Windows 兼容运行脚本与操作参考随仓库分发，改为独立运行；
+  A2 只作可选更新评估源。
+- v1.1.3 (2026-10-08) 将本体更新流程调整为只评估并选择性合并可信 Fork 改动；覆盖基线支持按路径推进。
 - v1.1.2 (2026-09-14) 新增第九节「拆分后自查」：三版对照 + 关键词计数 + 定性 + 锚点补偿四步，
   并记下实测教训（命令词归零是正确去重、真缺口反而无警报）。
 - v1.1.1 (2026-09-14) 第七节按实测刷新：`core-overrides` 主入口与工作区 `MEMORY.md` 标「已拆」；

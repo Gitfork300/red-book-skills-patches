@@ -1,15 +1,15 @@
 {
   "name": "core-overrides",
   "system": "shared",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "patch_for": "red-book-skills",
   "applies_to_main_version": ">=0.1.0",
   "priority": 2,
-  "author": "Eric",
+  "author": "Project maintainers",
   "created": "2026-09-12",
   "dependencies": [],
   "conflict_points": [
-    "覆盖主 skill 的 SKILL.md 与 3 个 scripts/*.py；apply 即生效，同步上游后需重新 apply"
+    "覆盖主 skill 的 SKILL.md 与 3 个 scripts/*.py；选择性合并 Fork 改动后需重新 apply"
   ],
   "files": [
     "SKILL.md",
@@ -21,7 +21,7 @@
     "helpers/apply_overrides.py"
   ],
   "state_files": [
-    "state/backup/"
+    "state/applied.json"
   ],
   "overrides": {
     "desc": "覆盖层的权威副本；本体里的是应用产物",
@@ -33,8 +33,8 @@
     ]
   },
   "baseline": {
-    "commit": "b006891ab1ab977b74ddd1b5a034ecc298248f7d",
-    "date": "2026-08-27T10:28:53Z",
+    "commit": "b043748282a57e347c52f517dfb59819121134ab",
+    "date": "2026-05-23T16:14:35Z",
     "file": "baseline.json"
   }
 }

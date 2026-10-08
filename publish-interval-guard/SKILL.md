@@ -1,11 +1,11 @@
 ---
 name: publish-interval-guard
 system: publish
-version: 1.4.0
+version: 1.4.1
 patch_for: red-book-skills
 applies_to_main_version: ">=0.1.0"
 priority: 20
-author: Eric (定制)
+author: Project maintainers
 created: 2026-09-04
 ---
 
@@ -31,6 +31,13 @@ created: 2026-09-04
 - `record` 仅在审核确认后写入；失败发布不计入间隔。
 - `state/publish_log.json` 只保留最近 100 条，不能用条目数统计当日发布量。
 - `record` 按 `note_id` 幂等；同一 note_id 重复调用不得新增记录。
+- 🔴 **`state/.guard.lock` 是常驻文件，不是"残留锁"**（2026-09-26 曾据此误判并手工删过一次）：
+  锁由内核按文件句柄管理、**关句柄/进程崩溃即自动释放**，所以**文件存在 ≠ 被占用**，
+  里面的 `pid` 只是最后一次持有者、仅供超时报错排查。**看到它停在旧 pid 上属正常，不要删**。
+- **真正会拦住后续发布的是未过期的 pending 占位**（在 `publish_log.json` 里），
+  由 `--pending-ttl`（默认 1800 秒）自动回收；确需手动释放才 `release --reserve-id <rid>`。
+  ⚠️ `release` 不带或带错 `--reserve-id`（如 `auto`）时会打印"未找到对应占位"，**这是正常结果**，
+  它不会"另写一把锁"，也不会影响后续 `reserve`。
 
 ## 命令
 

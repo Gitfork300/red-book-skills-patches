@@ -33,7 +33,7 @@ except Exception:
 HERE = os.path.dirname(os.path.abspath(__file__))
 PATCH_ROOT = os.path.normpath(os.path.join(HERE, ".."))
 SKILLS = os.path.normpath(os.path.join(PATCH_ROOT, ".."))
-WORKSPACE = os.environ.get("XHS_WORKSPACE") or os.path.expanduser("~/Documents/workbuddy-skill")
+WORKSPACE = os.environ.get("XHS_WORKSPACE") or os.path.expanduser("~/xhs-workspace")
 
 DEFAULT_MANIFEST = os.path.join(HERE, "doc_layers.json")
 

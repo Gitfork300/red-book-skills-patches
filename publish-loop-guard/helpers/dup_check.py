@@ -60,7 +60,7 @@
     python dup_check.py --title "广东科普创新展18日开幕" --class a
 
 环境变量：
-  XHS_WORKSPACE      工作区根目录（换机器必设），默认 ~/Documents/workbuddy-skill
+  XHS_WORKSPACE      工作区根目录（换机器必设），默认 ~/xhs-workspace
   XHS_DRAFT_DIR      稿件目录，默认 <workspace>/xhs_publish
   XHS_INTERVAL_LOG   发布日志，默认 <patches>/publish-interval-guard/state/publish_log.json
 """
@@ -77,7 +77,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PATCH_ROOT = os.path.normpath(os.path.join(HERE, ".."))
 PATCHES_ROOT = os.path.normpath(os.path.join(PATCH_ROOT, ".."))
 
-WS_DEFAULT = os.environ.get("XHS_WORKSPACE") or os.path.expanduser("~/Documents/workbuddy-skill")
+WS_DEFAULT = os.environ.get("XHS_WORKSPACE") or os.path.expanduser("~/xhs-workspace")
 DRAFT_DIR = os.environ.get("XHS_DRAFT_DIR") or os.path.join(WS_DEFAULT, "xhs_publish")
 LOG_PATH = os.environ.get("XHS_INTERVAL_LOG") or os.path.join(
     PATCHES_ROOT, "publish-interval-guard", "state", "publish_log.json"
@@ -116,9 +116,18 @@ TEMPLATE_WORDS = [
 ]
 
 
+# 系列标记（标题开头的 [xxx]）：如 [2026云栖大会] / [赛博户外] / [Canary] / [P]。
+# 同一系列的每篇都带同一个标记，天然相同。若让它参与公共子串比对，本系列内部会互判重复
+# （实测 [2026云栖大会] 标记 6 字 ≥ 阈值 5，导致该专题 5 篇全部 FAIL）。
+# 因此算 identity 时先剥掉标题开头的系列标记；对于 environment 标题完全相同的情况，
+# 由标题级相同判据兜底，不会漏放行。
+SERIES_TAG = re.compile(r"^\[[^\]]{1,24}\]")
+
+
 def identity(title):
-    """标题的「事件名本体」：剥掉日期与模板动词，只留可能标识事件的部分。"""
-    t = norm(title)
+    """标题的「事件名本体」：剥掉系列标记、日期与模板动词，只留可能标识事件的部分。"""
+    t = SERIES_TAG.sub("", (title or "").strip())
+    t = norm(t)
     t = DATE_PAT.sub("", t)
     for w in TEMPLATE_WORDS:
         t = t.replace(w, "")
@@ -131,8 +140,14 @@ def norm(title):
 
 
 def event_key(title):
-    """抽取"事件标识词"，如「浦江创新论坛」「宁波智博会」。抽不到返回 None。"""
-    t = norm(title)
+    """抽取"事件标识词"，如「浦江创新论坛」「宁波智博会」。抽不到返回 None。
+
+    注：系列标记（标题开头的 [xxx]）先剥掉。否则专题连载的每一篇都会抽到同一个
+    事件标识，被判成同一活动的重复稿 —— 2026 云栖专题 5 篇/天就是这么全 FAIL 的。
+    标题完全相同的情况由标题级相同判据兜底，不会漏放行。
+    """
+    t = SERIES_TAG.sub("", (title or "").strip())
+    t = norm(t)
     if not t:
         return None
     best = None
