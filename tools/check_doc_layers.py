@@ -33,12 +33,64 @@ except Exception:
 HERE = os.path.dirname(os.path.abspath(__file__))
 PATCH_ROOT = os.path.normpath(os.path.join(HERE, ".."))
 SKILLS = os.path.normpath(os.path.join(PATCH_ROOT, ".."))
-WORKSPACE = os.environ.get("XHS_WORKSPACE") or os.path.expanduser("~/xhs-workspace")
+
+
+def _looks_like_workspace(path):
+    return os.path.exists(os.path.join(path, ".workbuddy", "memory", "MEMORY.md"))
+
+
+def resolve_workspace():
+    """定位业务工作区；找不到返回 None（调用方跳过相关条目，不算问题）。
+
+    2026-10-09 修：原来硬编码 ~/xhs-workspace。该目录在本机根本不存在，
+    于是每次运行都稳定报一条「workspace-memory 主入口不存在」——
+    真问题被这条噪音淹没，久了就没人看这个门禁了。
+    2026-11-02 改：业务工作区统一硬编码为 C:/xhs（用户拍板，避免冗余数据
+    侵占 user 目录）。定位顺序：环境变量 XHS_WORKSPACE → C:/xhs 硬编码 →
+    当前工作目录向上回溯 → ~/WorkBuddy 下一层扫描（历史兜底）。
+    """
+    env = os.environ.get("XHS_WORKSPACE")
+    if env:
+        return env
+    if _looks_like_workspace("C:/xhs"):
+        return "C:/xhs"
+    cur = os.path.abspath(os.getcwd())
+    for _ in range(6):
+        if _looks_like_workspace(cur):
+            return cur
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            break
+        cur = parent
+    hub = os.path.expanduser("~/WorkBuddy")
+    if os.path.isdir(hub):
+        best, best_mtime = None, -1.0
+        try:
+            for name in sorted(os.listdir(hub))[:200]:
+                cand = os.path.join(hub, name)
+                if not os.path.isdir(cand) or not _looks_like_workspace(cand):
+                    continue
+                mtime = os.path.getmtime(os.path.join(cand, ".workbuddy", "memory", "MEMORY.md"))
+                if mtime > best_mtime:
+                    best, best_mtime = cand, mtime
+        except OSError:
+            pass
+        if best:
+            return best
+    return None
+
+
+WORKSPACE = resolve_workspace()
 
 DEFAULT_MANIFEST = os.path.join(HERE, "doc_layers.json")
 
 # 引用形如 `references/foo.md` / `topics/01-x.md`，出现在主入口文本里
 REF_RE = re.compile(r"`?((?:references|topics|refs)/[A-Za-z0-9_\-\.]+\.md)`?")
+
+# 归档类详情文件（changelog / archive / incidents 的历史部分）：
+# 保留在 refs/ 供人工追溯，但不挂主入口索引 —— 挂索引会让模型每次都读到
+# 无运行时价值的历史记录。故豁免「孤儿文件」检查（2026-10-30）。
+ARCHIVE_RE = re.compile(r"(changelog|archive)", re.I)
 
 
 def read(path):
@@ -52,12 +104,24 @@ def stats(path):
 
 
 def check_entry(entry, problems, infos):
-    root = entry["root"].replace("${PATCH_ROOT}", PATCH_ROOT)
-    root = root.replace("${SKILLS}", SKILLS).replace("${WORKSPACE}", WORKSPACE)
+    raw_root = entry["root"]
+    if "${WORKSPACE}" in raw_root and not WORKSPACE:
+        if entry.get("optional", False):
+            infos.append("[%s] 跳过：未定位到业务工作区（设 XHS_WORKSPACE 指定）"
+                         % entry["id"])
+            return
+        problems.append("[%s] 未定位到业务工作区，无法校验 %s；"
+                        "请设 XHS_WORKSPACE 指向工作区根目录" % (entry["id"], raw_root))
+        return
+    root = raw_root.replace("${PATCH_ROOT}", PATCH_ROOT)
+    root = root.replace("${SKILLS}", SKILLS).replace("${WORKSPACE}", WORKSPACE or "")
     main_rel = entry["main"]
     main_path = os.path.join(root, main_rel)
 
     if not os.path.exists(main_path):
+        if entry.get("optional", False):
+            infos.append("[%s] 跳过：主入口不在本机（%s）" % (entry["id"], main_path))
+            return
         problems.append("[%s] 主入口不存在: %s" % (entry["id"], main_path))
         return
 
@@ -88,6 +152,8 @@ def check_entry(entry, problems, infos):
             continue
         for fn in sorted(os.listdir(dd)):
             if not fn.lower().endswith(".md"):
+                continue
+            if ARCHIVE_RE.search(fn):
                 continue
             rel = "%s/%s" % (d, fn)
             if rel not in main_txt and fn not in main_txt:

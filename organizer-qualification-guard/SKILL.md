@@ -2,6 +2,7 @@
 name: organizer-qualification-guard
 system: publish
 version: 1.3.0
+description: "活动、展会、论坛的主办资质闸门：须事业单位、行业龙头或行业协会牵头的中大型活动且正文有含金量；付费小班、黑名单私企、无合规主办方一律硬拒。触发词：选活动题材、主办方资质。"
 patch_for: red-book-skills
 applies_to_main_version: ">=0.1.0"
 priority: 23
@@ -104,8 +105,8 @@ python helpers/check_organizer.py --title "..." --content "..."
 - 合规例：`上海AI产业链招聘会，覆盖人工智能、半导体、集成电路方向`
 - 拦截例：`某区秋季综合招聘会，涵盖餐饮、零售、家政、保安岗位` → exit 2
 
-**同时，招聘类也要带「参与难度 / 适合人群 / 专业性 / 活动规模 / 来源」底部评级块**
-（见 `writing-facts-only` v1.2.0），与其他活动类稿件格式一致。
+~~同时，招聘类也要带「参与难度 / 适合人群 / 专业性 / 活动规模 / 来源」底部评级块~~
+（2026-10-18 起评级块已废除，见 `writing-facts-only`；招聘类与其他活动类一样，只保留来源行 + `#话题`）。
 
 ### 屏蔽规则 D：个人付费 ≥99 且非年度举办 → 硬拒（2026-09-14 用户口径）
 

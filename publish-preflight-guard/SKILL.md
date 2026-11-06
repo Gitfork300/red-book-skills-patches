@@ -2,6 +2,7 @@
 name: publish-preflight-guard
 system: publish
 version: 1.20.0
+description: "发布前总检查与批量队列控制：资格 UNKNOWN 硬阻断、专题全名及有效期校验、非活动稿须声明 non_activity、必需标题与正文文件有效性。触发词：发布前检查、预检、preflight、批量队列。"
 patch_for: red-book-skills
 applies_to_main_version: ">=0.1.0"
 priority: 25
@@ -30,11 +31,11 @@ created: 2026-09-11
 | 10 | 封面合规 + **来源台账** | 真实感优先，无二维码/人物/文字/地图/机器人；`check_cover_source.py --batch-dir <目录>` 退 0——**展会/活动类批次官方宣传图 ≥80%**，无台账=不能排队 | `cover-image-rules` |
 | 11 | 封面文件核对 | 数量对、每张打开看过、无同名覆盖 | `cover-image-rules` |
 | 12 | AI 声明 | 含 AI 图/文 → 传 `--content-declaration` | `cover-image-rules` |
-| 13 | 间隔闸门 | **8~12 分钟随机**（下限 8 分钟） | `publish-interval-guard` |
+| 13 | 间隔闸门 | **6~14 分钟随机**（下限 6 分钟） | `publish-interval-guard` |
 | 14 | 选题配额 | `quota_check.py --kind weather --level <级别>` 退 0；恶劣天气 ≤1 篇（红/黑 3 篇） | `timeliness-window` |
 | 15 | 网络可达性 | `net_probe.py` 退 0；**必须真做 TLS 握手** | `windows-sandbox-workaround` |
 | 16 | 主办资质 | `check_organizer.py` 退 0（研究/案例类跳过） | `organizer-qualification-guard` |
-| 17 | 底部评级块 | 展会/活动类必带；首行 **`综合 ★…`（汉字在前、星级在后）** + 四维 + 来源 | `writing-facts-only` |
+| 17 | ~~底部评级块~~ | **已废除（2026-10-18，套模板违规）**：不写 `综合 ★` + 四维，只留来源行 + `#话题` | `writing-facts-only` |
 | 18 | 近似文章限次 | `near_dup_limit.py --title … --level <层级｜grade> --topic <主题>` 退 0；SSS/国家级 24h≤1 篇、A/行业级 **7 天**≤1 篇、专题系列不设限制 | `publish-loop-guard` |
 | 19 | **标题标记** | `title_tag.py --check "<标题>"` 退 0：必须有且仅有 **1 个** 方括号前缀（`[SSS]/[SS]/[S]/[A]/[P]/[X]/[天气]/[Canary]`），优先级 Canary > 天气 > 等级；字宽 ≤18（硬限 20） | `publish-loop-guard` |
 
@@ -53,13 +54,13 @@ python helpers/batch_preflight.py --notes xhs_publish/ai0912_notes.json
 ```
 
 - 第 14 项按题材条件适用（无恶劣天气选题跳过）；级别从稿件文本嗅探透传 `--level`（红/黑 3 篇，其余 1 篇）。
-- 每篇 notes 必须提供非空 `title`/`content` 或有效的 `title_file`/`content_file`；`non_activity: true` 用于非活动类，并触发非活动四维评级块及跳过会展地域/时效/资格闸门。
+- 每篇 notes 必须提供非空 `title`/`content` 或有效的 `title_file`/`content_file`；`non_activity: true` 用于非活动类，跳过会展地域/时效/资格闸门。
 - `title_file`、`content_file`、`cover` 相对路径按启动命令时的**当前工作目录**解析；建议绝对路径。缺失的标题/正文文件现在会报错退出，不再静默当空文本。
-- 第 9 项自算核心正文 450–600 / 全篇 <1000；第 17 项校验 `^综合\s*[★☆]`。
+- 第 9 项自算核心正文 450–600 / 全篇 <1000；第 17 项（评级块）**已随 2026-10-18 新规废除**。
 - 默认按发布优先级排序；未标 class 走 `other`（最保守）。
 - 只给自动化结论，5/6/7/10/12/13 仍需人工判（脚本列待核对清单）。
 - ⚠️ **务必发布前跑**：对已发布稿重跑，第 1 项"查重不过"是正确结论（已发过），不是误报。
-- `--only 1,8,9` = 只跑指定**检查项**；`--only-notes 1,3,5` = 只检查指定**稿件**（2026-10-03 修正，详见 refs/02-changelog v1.19.0）。
+- `--only 1,8,9` = 只跑指定**检查项**；`--only-notes 1,3,5` = 只检查指定**稿件**。
 
 ### 🚨 台账填报纪律（活动类）—— 2026-10-03 血的教训
 
@@ -86,7 +87,7 @@ python helpers/batch_preflight.py --notes xhs_publish/ai0912_notes.json
 ### 🚨 发布链脚本预检必须含 6 项硬闸门
 
 自己写的发布链脚本常漏调 `dup_check` → 已发布选题被二次发布（2026-09-14 `r1 第九届中国机器人峰会` 被重发）。
-硬要求：逐篇预检必须**同时**跑 7 项，任一不过即 SKIP：**查重（双源）/ 用词+字数 / 地域 / 主办 / 时效资格 / 评级块格式 / 封面来源台账（展会/活动类，`check_cover_source.py` 退 0）**。
+硬要求：逐篇预检必须**同时**跑 7 项，任一不过即 SKIP：**查重（双源）/ 用词+字数 / 地域 / 主办 / 时效资格 / 封面来源台账（展会/活动类，`check_cover_source.py` 退 0）**。（评级块格式 2026-10-18 起不再作为闸门。）
 模板 `xhs_publish/publish/_publish_chain_s0914.py` 已含；新批次复制改写，不从零重写。
 
 ## 四、已发布笔记补救
@@ -102,4 +103,3 @@ python helpers/batch_preflight.py --notes xhs_publish/ai0912_notes.json
 | 场景 | 读哪个文件 |
 | --- | --- |
 | 典型事故复盘、验收清单 | `refs/01-incidents.md` |
-| 版本修改记录（v1.0.0 ~ v1.20.0） | `refs/02-changelog.md` |

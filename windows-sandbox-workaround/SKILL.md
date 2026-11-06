@@ -2,6 +2,7 @@
 name: windows-sandbox-workaround
 system: shared
 version: 1.7.0
+description: "Windows 沙箱与受限会话适配：Chrome 脱离 job object、进程探活、网络可达性排查、登录态与风控规则索引、无人值守巡检失败停止与新鲜度核验。触发词：Chrome 起不来、9222 端口失效、登录态异常。"
 patch_for: red-book-skills
 applies_to_main_version: ">=0.1.0"
 priority: 10
@@ -125,4 +126,3 @@ created: 2026-09-04
 | 场景 | 读哪个文件 |
 | --- | --- |
 | 本机进程/工具链/网络的完整坑案例与脚本 | `refs/01-pitfalls.md` |
-| 版本修改记录（v1.0.0 ~ v1.7.0） | `refs/02-changelog.md` |

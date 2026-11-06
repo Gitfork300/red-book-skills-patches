@@ -10,12 +10,22 @@
   这样审核通过的上游改动和我们的本地定制都能保留。
 
 用法：
-  status                        本体每个覆盖文件的状态（APPLIED / PRISTINE / DRIFTED）
-  verify                        校验本体 == overrides；不一致退出 1
+  status [--json]               本体每个覆盖文件的状态（APPLIED / PRISTINE / DRIFTED）
+  verify [--json]               校验本体 == overrides；不一致退出 1
   apply [--dry-run] [--backup]  把 overrides 复制到本体
+  clean                         删除 overrides/ 下的生成物（__pycache__ 等），见下
   rebase                        按审核通过的路径刷新 baseline.json 上游基线（见下）
   diff [路径]                   显示本体与 override 的差异
   hash                          重新计算并打印各文件指纹
+
+clean 为什么必须存在（2026-10-09 修）：
+  只要有人 import / py_compile 过 overrides/scripts 下的模块，Python 就会在
+  `overrides/scripts/__pycache__/` 里留下 .pyc。这些 .pyc 一旦被当成「覆盖文件」，
+  后果是**永久 DRIFTED**：pyc 里嵌着源文件的路径与 mtime，每次编译都不同，
+  本体那份与 overrides 那份永远不可能相等 —— apply 也修不好。
+  而 ensure_compatible 见到 DRIFTED 就拒绝 apply，于是整条启动门禁被一个
+  编译缓存卡死，表现为「这个 skill 老报错、跑不起来」。
+  现在生成物一律不进覆盖清单（`clean` 可手动清空），从根上消除该故障。
 
 rebase 为什么必须存在：
   baseline.json 里存着「上游原版」的 sha256，用来判断某文件是「上游新版待 apply」
@@ -67,12 +77,12 @@ STATE_DIR = os.path.join(PATCH_ROOT, "state")
 #   备份里的 SKILL.md 是上游本体的旧副本、name 仍是 red-book-skills，于是与真身撞名 ——
 #   技能列表里出现多条同名 red-book-skills；同名时加载哪份取决于扫描顺序，
 #   一旦命中备份那份（旧版），覆盖层后续的修复就全部失效。
-#   迁到 skills 树外即消除该风险，存档性质不变。历史备份已同步迁移到新位置。
+#   迁到 skills 树外即消除该风险，存档性质不变。9 份遗留快照已于 2026-11-07
+#   与上游参考 clone 一起移至 C:/xhs/_skill-backup/skill-scan-exclusions/legacy-collisions-20261107/。
 # 需要换位置时用 RED_BOOK_OVERRIDES_BACKUP_DIR 覆盖。
 BACKUP_DIR = os.environ.get(
     "RED_BOOK_OVERRIDES_BACKUP_DIR",
-    os.path.join(os.path.expanduser("~"), "xhs-workspace",
-                 "_skill-backup", "core-overrides-preapply"),
+    os.path.join("C:/xhs", "_skill-backup", "core-overrides-preapply"),
 )
 APPLIED_STATE = os.path.join(STATE_DIR, "applied.json")
 
@@ -89,6 +99,12 @@ STATUS_APPLIED = "APPLIED"
 STATUS_PRISTINE = "PRISTINE"
 STATUS_STALE = "STALE"
 STATUS_DRIFTED = "DRIFTED"
+
+# 生成物一律不进覆盖清单。理由见文件头 clean 段说明：
+# .pyc 内嵌源文件路径与 mtime，永远对不上，会把整条门禁钉死在 DRIFTED。
+IGNORE_DIR_NAMES = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ipynb_checkpoints"}
+IGNORE_SUFFIXES = (".pyc", ".pyo", ".pyd", ".bak", ".orig", ".tmp", ".swp")
+IGNORE_FILE_NAMES = {".DS_Store", "Thumbs.db"}
 
 
 def _norm(path):
@@ -144,18 +160,76 @@ def _refresh_override_hashes():
         json.dump(base, f, ensure_ascii=False, indent=2)
 
 
+def _is_generated(rel):
+    """是否属于编译/编辑生成物 —— 这类文件不参与覆盖比对。"""
+    parts = rel.split("/")
+    if any(p in IGNORE_DIR_NAMES for p in parts[:-1]):
+        return True
+    name = parts[-1]
+    return name in IGNORE_FILE_NAMES or name.lower().endswith(IGNORE_SUFFIXES)
+
+
 def _file_list():
-    """overrides/ 下所有文件（相对路径，正斜杠）。"""
+    """overrides/ 下的受管源文件（相对路径，正斜杠），生成物已排除。"""
     out = []
-    for dp, _dns, fns in os.walk(OVERRIDES):
+    for dp, dns, fns in os.walk(OVERRIDES):
+        dns[:] = [d for d in dns if d not in IGNORE_DIR_NAMES]
         for fn in fns:
             fp = os.path.join(dp, fn)
-            out.append(os.path.relpath(fp, OVERRIDES).replace("\\", "/"))
+            rel = os.path.relpath(fp, OVERRIDES).replace("\\", "/")
+            if _is_generated(rel):
+                continue
+            out.append(rel)
     return sorted(out)
 
 
+def _generated_list():
+    """overrides/ 下当前存在的生成物（相对路径，正斜杠）。"""
+    out = []
+    for dp, dns, fns in os.walk(OVERRIDES):
+        for fn in fns:
+            fp = os.path.join(dp, fn)
+            rel = os.path.relpath(fp, OVERRIDES).replace("\\", "/")
+            if _is_generated(rel):
+                out.append(rel)
+    return sorted(out)
+
+
+def cmd_clean(args):
+    """删除 overrides/ 下的生成物（__pycache__ 等），不动任何源文件。"""
+    targets = _generated_list()
+    if not targets:
+        print("OK overrides/ 下没有生成物，无需清理")
+        return 0
+    print(f"将删除 {len(targets)} 个生成物：")
+    removed = 0
+    for rel in targets:
+        path = os.path.join(OVERRIDES, rel)
+        try:
+            os.remove(path)
+            removed += 1
+            print(f"   删除 {rel}")
+        except OSError as exc:
+            print(f"   !! 删除失败 {rel}: {exc}", file=sys.stderr)
+    # 顺手清掉空的 __pycache__ 目录
+    for dp, dns, _fns in os.walk(OVERRIDES, topdown=False):
+        for d in dns:
+            if d in IGNORE_DIR_NAMES:
+                try:
+                    os.rmdir(os.path.join(dp, d))
+                except OSError:
+                    pass
+    print(f"\nOK 清理完成（{removed}/{len(targets)}）；源文件未受影响")
+    return 0 if removed == len(targets) else 2
+
+
 def _target_path(rel):
-    """Map the upstream skill entry to a non-registering bundled instruction file."""
+    """Map the upstream skill entry to a non-registering bundled instruction file.
+
+    上游技能入口叫 SKILL.md，bundled runtime 侧叫 INSTRUCTIONS.md —— 后者不会被
+    WorkBuddy 递归注册成独立技能。覆盖层源文件自 2026-10-30 起同步改名为
+    INSTRUCTIONS.md，故 rel 两种写法都要映射到同一个目标（旧快照仍写 SKILL.md）。
+    """
     target_rel = "INSTRUCTIONS.md" if rel == "SKILL.md" else rel
     return os.path.join(LOCAL_SKILL, target_rel)
 
@@ -177,44 +251,69 @@ def _classify(rel, base, applied):
     return STATUS_DRIFTED, "本体内容与覆盖层、上游基线、上次 apply 版本都不同 —— 疑似直接改了本体"
 
 
-def cmd_status(args):
+def _scan():
+    """返回 (每个文件的状态列表, 非 APPLIED 数量)。"""
     base = _load_baseline()
     applied = _load_applied()
-    files = _file_list()
+    rows = []
+    for rel in _file_list():
+        st, why = _classify(rel, base, applied)
+        rows.append({"path": rel, "status": st, "reason": why})
+    bad = sum(1 for r in rows if r["status"] != STATUS_APPLIED)
+    return rows, len(_file_list()), bad
+
+
+def cmd_status(args):
+    base = _load_baseline()
+    rows, total, bad = _scan()
+    if getattr(args, "json", False):
+        print(json.dumps({
+            "main": LOCAL_SKILL,
+            "baseline_commit": base.get("baseline_commit"),
+            "total": total,
+            "bad": bad,
+            "files": rows,
+        }, ensure_ascii=False, indent=2))
+        return 0 if bad == 0 else 1
+
     print(f"主 skill   : {LOCAL_SKILL}")
-    print(f"覆盖文件   : {len(files)} 个")
+    print(f"覆盖文件   : {total} 个")
     print(f"基线 commit: {base.get('baseline_commit', '(无)')}  @ {base.get('baseline_date', '?')}")
     print()
-    bad = 0
-    for rel in files:
-        st, why = _classify(rel, base, applied)
-        mark = {"APPLIED": "OK ", "PRISTINE": "!! ", "STALE": ".. ", "DRIFTED": "?? "}[st]
-        print(f"  [{mark}] {st:9} {rel}")
-        print(f"         {why}")
-        if st != STATUS_APPLIED:
-            bad += 1
+    for r in rows:
+        mark = {"APPLIED": "OK ", "PRISTINE": "!! ", "STALE": ".. ", "DRIFTED": "?? "}[r["status"]]
+        print(f"  [{mark}] {r['status']:9} {r['path']}")
+        print(f"         {r['reason']}")
     print()
     if bad == 0:
         print("结论：本体与覆盖层一致（正常态）。")
-    elif bad == len(files):
+    elif bad == total:
         print("结论：本体全部为上游原版 —— 同步后尚未 apply，请跑 `apply`。")
     else:
         print(f"结论：{bad} 个文件需要处理（见上）。")
+        print("      DRIFTED 多为本体被手改；若是 .pyc 之类生成物，先跑 `clean`。")
     return 0 if bad == 0 else 1
 
 
 def cmd_verify(args):
-    base = _load_baseline()
-    applied = _load_applied()
-    bad = [r for r in _file_list() if _classify(r, base, applied)[0] != STATUS_APPLIED]
+    rows, total, bad = _scan()
+    if getattr(args, "json", False):
+        print(json.dumps({
+            "ok": bad == 0,
+            "total": total,
+            "bad": bad,
+            "files": [r for r in rows if r["status"] != STATUS_APPLIED],
+        }, ensure_ascii=False, indent=2))
+        return 0 if bad == 0 else 1
     if bad:
         print("!! 本体与覆盖层不一致：")
-        for r in bad:
-            st, why = _classify(r, base, applied)
-            print(f"   {st:9} {r}  ({why})")
+        for r in rows:
+            if r["status"] == STATUS_APPLIED:
+                continue
+            print(f"   {r['status']:9} {r['path']}  ({r['reason']})")
         print("   修复：python helpers/apply_overrides.py apply")
         return 1
-    print(f"OK 本体 {len(_file_list())} 个覆盖文件全部与覆盖层一致")
+    print(f"OK 本体 {total} 个覆盖文件全部与覆盖层一致")
     return 0
 
 
@@ -401,7 +500,7 @@ def cmd_hash(args):
     base = _load_baseline()
     for rel in _file_list():
         ov, lo = os.path.join(OVERRIDES, rel), _target_path(rel)
-        up = (base.get("files", {}).get(rel) or {}).get("upstream_sha256", "(未记录)")
+        up = (base.get("files", {}).get(rel) or {}).get("upstream_sha256") or "(未记录)"
         print(f"{rel}")
         print(f"    upstream {up[:16] if up != '(未记录)' else up}")
         print(f"    override {_sha(ov)[:16]}")
@@ -412,8 +511,11 @@ def cmd_hash(args):
 
 def main():
     p = argparse.ArgumentParser(description="本体覆盖层：应用/校验我们自己的改动")
-    p.add_argument("action", choices=["status", "verify", "apply", "rebase", "diff", "hash"])
+    p.add_argument("action",
+                   choices=["status", "verify", "apply", "clean", "rebase", "diff", "hash"])
     p.add_argument("path", nargs="?", help="(diff 用) 指定单个文件")
+    p.add_argument("--json", action="store_true",
+                   help="(status/verify 用) 输出结构化 JSON，供门禁程序判定")
     p.add_argument("--dry-run", action="store_true", help="(apply 用) 只报告不写入")
     p.add_argument("--backup", action="store_true", help="(apply 用) 保留原文件备份（默认即备份）")
     p.add_argument("--from", dest="source", help="(rebase 用) 上游快照解压目录，推荐显式指定")
@@ -434,6 +536,7 @@ def main():
         "status": cmd_status,
         "verify": cmd_verify,
         "apply": cmd_apply,
+        "clean": cmd_clean,
         "rebase": cmd_rebase,
         "diff": cmd_diff,
         "hash": cmd_hash,

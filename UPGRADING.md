@@ -1,14 +1,15 @@
 # A2 更新评估与独立运行维护
 
 可信参考源为 [`Gitfork300/xiaohongshu-skills-A2`](https://github.com/Gitfork300/xiaohongshu-skills-A2)。
-此仓库的 `runtime/` 是可独立执行的 Windows 兼容运行层；A2 只用于可选的更新评估，不是运行依赖。
+此仓库的 `runtime/` 是可独立执行的 Windows 兼容运行层；A2 是 core 更新参考源，不是运行依赖。
 
 ## 运行边界
 
 - 发布、登录、搜索和互动使用本仓库 `runtime/scripts/`，不要求同级安装、不要求 Git remote，
   日常运行不访问 GitHub。
-- Python 直接依赖只有 `requests` 和 `websockets`，通过 `tools/setup_runtime.py` 安装到仓库
-  `.venv/`。Chrome/Chromium 由本机提供。
+- Python 直接依赖为 `requests`、`websockets`、`opencv-python` 和 `Pillow`，通过 `tools/setup_runtime.py` 安装到仓库
+  `.venv/`。已安装环境在日常升级时保持不变；维护方可更新首次安装方案，但须评估既有环境兼容性。
+  详见 `RUNTIME_SETUP.md`。Chrome/Chromium 由本机提供。
 - 账号配置、登录态、Chrome Profile、稿件和运行状态均为本机数据，不进入仓库或跨设备复制。
 
 ## A2 与本地架构
@@ -31,8 +32,10 @@ A2 使用模块化 `scripts/xhs/`、`skills/` 和浏览器扩展；本地运行�
 
 ## 评估和移植步骤
 
-1. 运行 `update-checker` 查看 A2 最新提交；需要完整差异时将快照解压到临时目录。
-2. 对每个候选改动核对 A2 实际实现、本地行为、平台风险和当前测试；明确记录采纳、保留或拒绝。
+1. 运行 `.\.venv\Scripts\python.exe update-checker\helpers\update_check.py check-now`
+   查看 A2 `main` 最新提交；版本不变也会检查。发现新提交后运行 `diff-local` 并审查完整差异。
+2. 对每个候选改动核对 A2 实际实现、本地行为、平台风险和当前测试；适用改动须适配进 core，
+   明确记录采纳、保留或不适用的理由。`UPDATE_AVAILABLE` 不代表已更新。
 3. 已采纳改动先合并进 `core-overrides/overrides/`；没有覆盖层的受管文件则更新 bundled `runtime/`。
 4. 运行：
 
@@ -64,6 +67,10 @@ A2 使用模块化 `scripts/xhs/`、`skills/` 和浏览器扩展；本地运行�
 
 ## 本机快照备份
 
-`tools/backup_snapshots.py` 用于备份 bundled runtime 和 Patch 工作区；它不备份 Chrome Profile、
-Cookie 或 `runtime/config/accounts.json`。备份写入 `~/xhs-workspace/_skill-backup/`，
-保留策略和告警见脚本头部说明。不要把生成的快照放进技能树或提交到公开仓库。
+`tools/backup_snapshots.py` 用于备份 bundled runtime、Patch 工作区，并将发布台账和封面二维码白名单
+分开复制到业务状态快照；源码包不包含各 `state/` 目录里的 JSON。它不备份 Chrome Profile、Cookie、
+账号配置或 `.git` 历史。
+备份写入 `C:/xhs/_skill-backup/`，
+源码快照保留最近 30 份，业务状态快照不自动删除；保留策略和告警见脚本头部说明。
+Local Agent Host 每日 10:00 运行此工具。备份未加密且与源数据同机，不能替代异机/离线备份。
+不要把生成的快照放进技能树或提交到公开仓库。

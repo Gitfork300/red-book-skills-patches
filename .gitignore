@@ -4,6 +4,13 @@ __pycache__/
 .venv/
 runtime/tmp/
 
+# ── 发布失败截图（产物，非源码）─────────────────────
+# cdp_publish.py 的 `_capture_publish_validation_state` 分支在发布失败时
+# 把 Page.captureScreenshot 写到脚本同目录（runtime/scripts/xhs_publish_fail.png）。
+# 它只服务于当次排障，下次失败会自动重写；入库既无意义又会把本机页面带出去。
+# 2026-11-06 已把 10-21 遗留的 350KB 实例移到 _skill-backup/artifacts_20261106/。
+runtime/scripts/*.png
+
 # ── 日志/状态备份 ────────────────────────────────
 *.bak
 
@@ -52,8 +59,8 @@ chrome-profile/
 _archive/
 
 # ── 上游只读备份（不作为 Patch、不参与公开同步）────────
-# red-book-skills-upstream 仅用于本地对照和兼容检查；运行时加载只认上游安装目录
-# 与本目录下的 Patch，避免把整份上游再次复制进 Patch 仓库。
+# 旧的 red-book-skills-upstream clone 已移至 C:/xhs/_skill-backup/skill-scan-exclusions/；
+# 如需重新获取参考 clone，应放在仓库外，避免旧 SKILL.md 进入技能扫描树。
 red-book-skills-upstream/
 
 # ── 编辑器 / 系统 ────────────────────────────────

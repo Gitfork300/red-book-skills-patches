@@ -1,12 +1,13 @@
 {
   "name": "publish-interval-guard",
   "system": "publish",
-  "version": "1.4.1",
+  "version": "1.6.1",
   "patch_for": "red-book-skills",
   "applies_to_main_version": ">=0.1.0",
   "priority": 20,
   "author": "Project maintainers",
   "created": "2026-09-04",
+  "updated": "2026-11-06",
   "dependencies": [],
   "conflict_points": [
     {
@@ -18,10 +19,11 @@
   "files": [
     "SKILL.md",
     "helpers/publish_interval.py",
-    "refs/01-detail.md"
+    "refs/01-detail.md",
+    "refs/02-changelog.md"
   ],
   "state_files": [
-    "state/publish_log.json",
-    "state/.guard.lock"
+    "<XHS_STATE_ROOT>/publish/publish_log.json",
+    "<XHS_STATE_ROOT>/publish/.guard.lock"
   ]
 }

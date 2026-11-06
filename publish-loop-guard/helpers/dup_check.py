@@ -60,7 +60,7 @@
     python dup_check.py --title "广东科普创新展18日开幕" --class a
 
 环境变量：
-  XHS_WORKSPACE      工作区根目录（换机器必设），默认 ~/xhs-workspace
+  XHS_WORKSPACE      工作区根目录，默认 C:/xhs（换机器可用它覆盖）
   XHS_DRAFT_DIR      稿件目录，默认 <workspace>/xhs_publish
   XHS_INTERVAL_LOG   发布日志，默认 <patches>/publish-interval-guard/state/publish_log.json
 """
@@ -77,11 +77,30 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PATCH_ROOT = os.path.normpath(os.path.join(HERE, ".."))
 PATCHES_ROOT = os.path.normpath(os.path.join(PATCH_ROOT, ".."))
 
-WS_DEFAULT = os.environ.get("XHS_WORKSPACE") or os.path.expanduser("~/xhs-workspace")
+WS_DEFAULT = os.environ.get("XHS_WORKSPACE") or "C:/xhs"
 DRAFT_DIR = os.environ.get("XHS_DRAFT_DIR") or os.path.join(WS_DEFAULT, "xhs_publish")
-LOG_PATH = os.environ.get("XHS_INTERVAL_LOG") or os.path.join(
-    PATCHES_ROOT, "publish-interval-guard", "state", "publish_log.json"
-)
+def _log_path() -> str:
+    """发布台账路径：env 覆盖 > 工作区 `.state`（迁移期可回落树内旧址）。
+
+    权威在 `<patches>/tools/runtime_paths.py`。为什么要搬出 skill 树：全量替换包会连 state
+    一起覆盖；台账留在树内＝升级即丢历史，判重会从 0 开始（2026-11-06 用户裁定）。
+    """
+    override = os.environ.get("XHS_INTERVAL_LOG")
+    if override:
+        return override
+    try:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "_xhs_runtime_paths", os.path.join(PATCHES_ROOT, "tools", "runtime_paths.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.resolve_publish_log()
+    except Exception:
+        return os.path.join(PATCHES_ROOT, "publish-interval-guard", "state", "publish_log.json")
+
+
+LOG_PATH = _log_path()
 
 # 类别化查重窗口：
 #   a        → 当天（同一自然日）内不得重复（对应用户口径「国家级 24 小时内不重复」）
@@ -386,6 +405,11 @@ def main():
     ap.add_argument("--loose", action="store_true",
                     help="全量扫描时也启用「公共子串」信号（默认只比事件标识）")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--post", action="store_true",
+                    help="发布后复检口径：与已发布日志同标题的条目视为「本篇自己」，"
+                         "不判重复（发布前排队预检不要开）")
+    ap.add_argument("--post-strict", action="store_true",
+                    help="发布后复检仍按重复拦截「标题完全相同」（防手滑重复提交）")
     args = ap.parse_args()
 
     if not os.path.isdir(DRAFT_DIR):
@@ -427,6 +451,7 @@ def main():
     findings = []
     seen = set()
     loose = True if args.title else args.loose
+    published_same = 0   # --post：与已发布同标题（= 本篇自己）的条数
 
     if args.title:
         me = {"title": args.title, "src": "(待发)"}
@@ -448,6 +473,13 @@ def main():
         # 1) 与**已发日志**比：完整判据（事件标识 + 公共子串）。
         #    这是「防重复发布」的核心 —— 平台上发过的选题不该再发。
         for e in entries:
+            # --post（2026-10-23）：发布后复检时，「待发标题」与「已发布日志同标题」
+            #   就是**同一篇自己**（今天 06:01 发的稿 vs 现在复检它），不是重复选题。
+            #   不跳过的话，收口复检会把当天每一篇都报成「疑似重复 1 组」（实测 28 篇全中）。
+            #   --post-strict 保留拦截（防手滑把同一篇重发一次）。
+            if args.post and not args.post_strict and norm(e["title"]) == mine:
+                published_same += 1
+                continue
             if exempt_norms and norm(e["title"]) in exempt_norms:
                 # 系列豁免只放宽「活动名公共子串」信号；标题完全相同=真重复，必须拦。
                 # （2026-09-16 事故：b3 已发布，补发链从 b2 续跑时被此豁免放行，
@@ -497,7 +529,11 @@ def main():
             print(f"[dup] 类别＝{args.cls}；发布优先级 A 类 > 行业类 > 其他；"
                   f"窗口：A 类当天 / 行业类 7 天 / 其他 15 天内不得重复")
         if not findings:
-            print("[dup] OK 未发现重复选题")
+            if published_same:
+                print(f"[dup] OK 未发现重复选题（发布后复检口径：{published_same} 条为已发布的同一篇，"
+                      f"不计重复）")
+            else:
+                print("[dup] OK 未发现重复选题")
         else:
             print(f"[dup] !! 疑似重复 {len(findings)} 组：")
             for f in findings:

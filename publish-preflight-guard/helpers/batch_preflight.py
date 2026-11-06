@@ -367,23 +367,13 @@ def main():
             if rc == 1:
                 fails.append((key, 16, "主办资质"))
 
-        # 17) 底部评级块（展会/活动类必带；首行「综合 ★…」汉字在前）
-        #     技术前沿类用适配四维：阅读门槛 / 适合人群 / 专业性 / 信息量级
-        #     （用户 2026-09-16 口径：话题 C 的评级块按适配维度校验）
+        # 17) 底部评级块 —— 2026-10-18 已废除（用户收到「套模板」违规警告，拍板删除评价环节）。
+        #     由硬门禁改为软提示：不再校验四维/首行，只提示存在与否，不判 fail。
         if want(17):
-            if n.get("non_activity") and ("阅读门槛" in content or "信息量级" in content):
-                miss = [f for f in RATING_FIELDS_ADAPTED if f not in content]
+            if "综合" in content and ("阅读门槛" in content or "参与难度" in content):
+                print("  [17] 底部评级块".ljust(38) + "⚠️ 仍含评级块（2026-10-18 起应删除，仅提示不拦截）")
             else:
-                miss = [f for f in RATING_FIELDS if f not in content]
-            if miss:
-                print("  [17] 底部评级块".ljust(38) + f"!! FAIL  缺字段：{'、'.join(miss)}")
-                fails.append((key, 17, "评级块缺字段"))
-            elif not OVERALL_RE.search(content):
-                print("  [17] 底部评级块".ljust(38)
-                      + "!! FAIL  缺首行「综合 ★…」（汉字在前，不能是「★… 综合」）")
-                fails.append((key, 17, "评级块首行顺序/缺失"))
-            else:
-                print("  [17] 底部评级块".ljust(38) + "OK  首行「综合 ★…」+ 四维 + 来源")
+                print("  [17] 底部评级块".ljust(38) + "OK（2026-10-18 起不再要求）")
         else:
             print("  [17] 底部评级块".ljust(38) + "SKIP")
 

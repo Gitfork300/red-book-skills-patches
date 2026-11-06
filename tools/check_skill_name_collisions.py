@@ -9,13 +9,16 @@
     1. 技能列表出现多条同名项；
     2. 同名时**加载哪份取决于扫描顺序、不确定** —— 若命中的是旧副本（如 apply 前的备份），
        覆盖层后续的修复会静默失效，且不报错。
-  本次事故即由 `core-overrides/state/backup/<ts>/SKILL.md`（上游旧版副本）引起，
-  该目录已迁到 `~/xhs-workspace/_skill-backup/core-overrides-preapply/`。
+  本次事故即由 `core-overrides/state/backup/<ts>/SKILL.md`（上游旧版副本）引起。
+  2026-11-07 将 9 份遗留快照及上游参考 clone 移至
+  `C:/xhs/_skill-backup/skill-scan-exclusions/legacy-collisions-20261107/`，
+  并以外置 SHA-256 清单验证；勿将其放回技能扫描树。
 
 判定口径：
   撞名不等于有风险。若撞名的几份文件**内容完全一致**（行尾归一 + 去 BOM 后 sha256 相同），
-  加载哪份结果都一样 —— 如 `core-overrides/overrides/SKILL.md`（覆盖层权威源，必须与本体同名，
-  改 name 会在 apply 时污染本体）。这类标记为 `SAME`，不算失败。
+  加载哪份结果都一样 —— 例如覆盖层权威源（原 `core-overrides/overrides/SKILL.md`，
+  2026-10-30 起改名 `INSTRUCTIONS.md` 以退出技能注册，已不再进入本检查；
+  改文件名不影响 apply 目标，映射见 `apply_overrides._target_path`）。这类标记为 `SAME`，不算失败。
   内容不同 → `DIFF`，是真风险，退出码 1。
 
 用法：

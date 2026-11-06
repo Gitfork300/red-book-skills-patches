@@ -44,8 +44,10 @@ _TLDS = (
     "site|info|club|vip|shop|art|store|cloud|online|ltd|group|live|fun|work"
 )
 # 允许域名前出现子域与路径（github.com/a/b、autoclaw.z.ai/blog/x）
+# 2026-10-23 修：原正则**大小写敏感**，导致大写后缀域名（Unite.AI、Example.COM）整类漏检
+# —— 10-23 的 y1023_01 来源行写了「Unite.AI」，门禁没拦住。域名后缀一律忽略大小写。
 _URLISH = (
-    r"(?<![A-Za-z0-9._-])"
+    r"(?i)(?<![A-Za-z0-9._-])"
     r"(?:[A-Za-z0-9][A-Za-z0-9-]*\.)+(?:" + _TLDS + r")"
     r"(?:/[^\s，。；、）)】」』]*)?"
 )
@@ -92,6 +94,18 @@ PHONE_RE = re.compile(
     r"(?![A-Za-z0-9.])"
 )
 
+# 邮箱地址 —— 平台视为导流违规（用户 2026-10-23 明确：正文不要邮箱/电话等推广信息）
+# 邮箱与裸域名同罪：都是「让读者离开平台去联系」的路径。
+# 边界：@ 前后必须是合法邮箱片段；纯编号（如 arXiv 2608.23189）不受影响。
+EMAIL_RE = re.compile(
+    r"(?<![A-Za-z0-9._%+\-])"
+    r"[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}"
+    r"(?![A-Za-z0-9\-])"
+)
+
+# QQ 号 / QQ 群号 —— 同属站外联系方式
+QQ_RE = re.compile(r"(?<![A-Za-z0-9])QQ\s*[:：]?\s*\d{5,12}(?![0-9])", re.I)
+
 
 # 专题系列标题序号（P0）—— 用户 2026-09-18：「另外[专题] 后续不要写序号在主题中」。
 # 禁止 ①-⑳、（一）~（十）（全/半角括号）、系列① / 系列1 / 系列一。
@@ -130,6 +144,19 @@ def check(text: str) -> tuple[int, list[str], list[str]]:
         p0_hits.append(
             f"[P0] 出现电话号「{m.group()}」—— 平台视为导流违规，正文一律不写电话，"
             "改用『联系主办方官方账号』等表述"
+        )
+
+    m = EMAIL_RE.search(text)
+    if m:
+        p0_hits.append(
+            f"[P0] 出现邮箱「{m.group()}」—— 平台视为导流违规（用户 2026-10-23 规则："
+            "正文禁邮箱/电话等推广信息），改用机构名署名，不留任何联系方式"
+        )
+
+    m = QQ_RE.search(text)
+    if m:
+        p0_hits.append(
+            f"[P0] 出现 QQ 号「{m.group()}」—— 平台视为导流违规，正文一律不写号码"
         )
 
     for pattern, msg in P1_PATTERNS:

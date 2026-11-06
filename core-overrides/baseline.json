@@ -2,13 +2,16 @@
   "upstream_repo": "Gitfork300/xiaohongshu-skills-A2",
   "baseline_commit": "b043748282a57e347c52f517dfb59819121134ab",
   "baseline_date": "2026-05-23T16:14:35Z",
-  "captured_at": "2026-10-08T22:06:10+08:00",
+  "captured_at": "2026-11-06T18:56:25+08:00",
   "hash_algo": "sha256(行尾归一化为 LF 且去 BOM 后)",
   "purpose": "A2 与本地 Windows 兼容运行层架构不同；仅对记录的一对一或映射源路径进行哈希监测，不代表 A2 文件可直接覆盖本地同名文件",
+  "notes": [
+    "2026-11-06 补登记 scripts/run_lock.py：该文件一直随覆盖层分发并在 applied.json 中，却漏在本清单外，导致判断「run_lock 是上游改的还是本地改的」时无依据。现按既有 upstream_absent 模式补入。"
+  ],
   "files": {
-    "SKILL.md": {
+    "INSTRUCTIONS.md": {
       "upstream_sha256": "e01604d830c13d92c568a8a6237d7071e04bc49cfe2217a8a466203789ab6a99",
-      "override_sha256": "aa1ef39d4a910a739c3c2fe9f74e0f32d82f7abc4b5251982871e00b5b21836c"
+      "override_sha256": "75694350ecda19c14d86f293017ce1ef6b4b10f35f4ac4c77de69f4fab1a35f5"
     },
     "scripts/cdp_publish.py": {
       "upstream_sha256": null,
@@ -18,7 +21,7 @@
         "scripts/xhs/cdp.py": "6c10344720aa5aff841722d0dfe35059ecfddbaea1333cf8d945f6138f8d4aed",
         "scripts/xhs/errors.py": "5c84dda75c91c75a772f709e42bbbd09d3a725d6a528eacaceb2dd68646af86b"
       },
-      "override_sha256": "49722e047893ef274216ca5da0b6f08fbc421634a37d66048cac3c1518c83a3b"
+      "override_sha256": "b05d7a26d1e6344955ac46028208344ceb05f2869a51868fda4d9e662b209f29"
     },
     "scripts/chrome_launcher.py": {
       "upstream_sha256": null,
@@ -32,17 +35,24 @@
       "mapping_note": "A2 publication is split across scripts/xhs modules and does not have a directly comparable pipeline file",
       "override_sha256": "8759ad5c25db5d8d1349266b92227a1382810fd0a1388d9dcb06cd8d7a3b609b"
     },
+    "scripts/run_lock.py": {
+      "upstream_sha256": null,
+      "upstream_absent": true,
+      "mapping_note": "纯本地新增（跨平台内核锁）；A2 无同名文件，旧式文件锁存在竞态，故不做文件级比对，只随覆盖层整体分发",
+      "override_sha256": "f49e32fb898d6922a224fc07b3783433a4388f4e9fca1af664606c38a6aee5a7",
+      "added_at": "2026-11-06"
+    },
     "references/01-publish-flow.md": {
       "upstream_sha256": null,
       "upstream_absent": true,
       "mapping_note": "Local operational reference; no same-purpose A2 path is tracked for file-level comparison",
-      "override_sha256": "0c93efcca0a45e75503e794747c15d6bdbf501717f308d8e89d271cb298d8e10"
+      "override_sha256": "f819e33533020c8c457178949fa2bcbda84f8ff5f946ba4a4357c934e1b02d74"
     },
     "references/03-constraints.md": {
       "upstream_sha256": null,
       "upstream_absent": true,
       "mapping_note": "Local operational reference; no same-purpose A2 path is tracked for file-level comparison",
-      "override_sha256": "2f6827e42707ca6c6d2954fccc40e1e4d0a68aed2ccef79b09602cb3576150bd"
+      "override_sha256": "eb4e3d6f740e510a3a4f99baed04fb05a973a45dd453a6022244fa2c6f040f39"
     },
     "references/04-pitfalls.md": {
       "upstream_sha256": null,
@@ -54,7 +64,7 @@
       "upstream_sha256": null,
       "upstream_absent": true,
       "mapping_note": "Local synchronization reference; not a direct A2 counterpart",
-      "override_sha256": "24278ac9d430638709dbf747896426d95f0b5c23c207eedb843317461d22ffc3"
+      "override_sha256": "a0ee0efe7b630268ff7469375aa5669b26f30caaf5539064ac21c8e2aa6ac7a3"
     }
   }
 }

@@ -162,7 +162,8 @@ var rc = el.querySelector('div.reply.icon-container')
    → `comments.list[]`（含 `id` / `content` / `subComments` / `userInfo.nickname`）。
 3. 无 token 直接访问 `/explore/<nid>` → **404**（`error_code=300031`）。
 
-**节奏**：间隔 32~44 秒/条，跨轮以「已成功名单」自动跳过（日志 `logs/dm_sent2.json`）。
+**节奏**：间隔 **随机 20~30 秒**/条（2026-10-09 用户拍板；原 32~44 秒已作废），
+跨轮以「已成功名单」自动跳过（日志 `logs/dm_sent2.json`）。
 
 ### respond-comment 定位：`--comment-id` 可能失效，改用作者 + 片段（2026-09-25 实测）
 

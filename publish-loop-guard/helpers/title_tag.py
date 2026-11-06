@@ -68,6 +68,26 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PATCH_ROOT = os.path.normpath(os.path.join(HERE, ".."))
 PATCHES_ROOT = os.path.normpath(os.path.join(PATCH_ROOT, ".."))
 
+
+def _log_path() -> str:
+    """发布台账路径：env 覆盖 > 工作区 `.state`（迁移期可回落树内旧址）。
+
+    权威在 `<patches>/tools/runtime_paths.py`；state 不进 skill 树（2026-11-06 用户裁定）。
+    """
+    override = os.environ.get("XHS_INTERVAL_LOG")
+    if override:
+        return override
+    try:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "_xhs_runtime_paths", os.path.join(PATCHES_ROOT, "tools", "runtime_paths.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.resolve_publish_log()
+    except Exception:
+        return os.path.join(PATCHES_ROOT, "publish-interval-guard", "state", "publish_log.json")
+
 # 复用 safe-wording-guard 的字宽实现（避免两套口径）
 try:
     sys.path.insert(0, os.path.join(PATCHES_ROOT, "safe-wording-guard", "helpers"))
@@ -270,10 +290,9 @@ def main():
         return 1 if bad else 0
 
     if args.scan:
-        cand = [os.path.join(PATCHES_ROOT, "publish-interval-guard", "state", "publish_log.json")]
-        log = next((p for p in cand if os.path.exists(p)), None)
-        if not log:
-            print("找不到 publish_log.json", file=sys.stderr)
+        log = _log_path()
+        if not os.path.exists(log):
+            print(f"找不到 publish_log.json（应位于工作区 .state/publish/）：{log}", file=sys.stderr)
             return 2
         rows = json.load(open(log, encoding="utf-8"))
         cnt = {"none": 0, "unknown": 0}

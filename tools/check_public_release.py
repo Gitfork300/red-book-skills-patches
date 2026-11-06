@@ -32,21 +32,33 @@ SECRET_PATTERN = re.compile(
 )
 
 
-def git(*args: str) -> list[str]:
-    result = subprocess.run(
-        ["git", "-C", str(ROOT), *args],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=True,
-    )
+def git(*args: str) -> list[str] | None:
+    """在仓库内执行 git；仓库不存在 / git 不可用时返回 None（不抛异常）。
+
+    2026-10-09 修：本机技能目录常常只是解压出来的文件夹、没有 .git，
+    原先 check=True 会让 git 以 128 退出并抛 CalledProcessError，
+    整个门禁以 traceback 结束 —— 看起来像「skill 崩了」，实际只是没建仓库。
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(ROOT), *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
     return [line for line in result.stdout.splitlines() if line]
 
 
 def check_paths() -> list[str]:
+    tracked = git("ls-files")
+    if tracked is None:
+        raise RuntimeError("无法检查 Git 已跟踪文件；请确认 Git 可用且当前目录为仓库")
     findings = []
-    for path in git("ls-files"):
+    for path in tracked:
         normalized = path.replace("\\", "/")
         allowed_placeholder = normalized.endswith(("/README.md", "/.gitkeep"))
         if FORBIDDEN_PATH.search(normalized) and not allowed_placeholder:
@@ -66,7 +78,8 @@ def check_files() -> tuple[list[str], int]:
             path = Path(base) / name
             try:
                 data = path.read_bytes()
-            except OSError:
+            except OSError as exc:
+                findings.append(f"cannot scan file: {path.relative_to(ROOT)}: {exc}")
                 continue
             if b"\x00" in data[:4096]:
                 continue
@@ -84,7 +97,11 @@ def main() -> int:
     parser.add_argument("--quiet", action="store_true", help="只输出失败项")
     args = parser.parse_args()
 
-    path_findings = check_paths()
+    try:
+        path_findings = check_paths()
+    except RuntimeError as exc:
+        print(f"FAIL {exc}", file=sys.stderr)
+        return 2
     content_findings, scanned = check_files()
     findings = path_findings + content_findings
 

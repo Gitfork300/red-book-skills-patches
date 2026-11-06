@@ -5,7 +5,7 @@
 - 公开仓库只保留本说明和 `.gitkeep`。
 - `applied.json`、锁文件只在本机生成，禁止提交。
 - **apply 前的本体备份不在这里**（2026-10-07 起）：落在
-  `~/xhs-workspace/_skill-backup/core-overrides-preapply/<时间戳>/`。
+  `C:/xhs/_skill-backup/core-overrides-preapply/<时间戳>/`。
   移出 `skills/` 树的原因：技能扫描器会递归扫 `skills/**/SKILL.md` 并按
   frontmatter 的 `name` 注册，备份里的 SKILL.md 与本体同名会撞名，
   且备份是旧版 —— 同名时加载哪份不确定，有回退风险。

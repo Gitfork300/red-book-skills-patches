@@ -1,6 +1,6 @@
 {
   "name": "comment-reply-guard",
-  "version": "1.22.0",
+  "version": "1.24.1",
   "system": "comment",
   "patch_for": "red-book-skills",
   "applies_to_main_version": ">=0.1.0",

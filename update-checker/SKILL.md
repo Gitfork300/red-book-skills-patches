@@ -1,7 +1,8 @@
 ---
 name: update-checker
 system: shared
-version: 1.4.0
+version: 1.5.0
+description: "检查 A2 Fork main 最新提交并持续提示待评估更新，含 diff-local 映射差异与覆盖冲突；不自动合并。触发词：检查上游更新、评估 A2、diff-local。"
 patch_for: red-book-skills
 applies_to_main_version: ">=0.1.0"
 priority: 5
@@ -82,11 +83,10 @@ python <patch>/helpers/update_check.py acknowledge --sha <commit-sha>
 
 ### 检测源
 
-先读取可信 Fork `pyproject.toml` 的版本号；只有版本变化或尚无版本记录，才继续按以下顺序查询最新 commit：
+先读取可信 Fork `pyproject.toml` 的版本号，再按以下顺序查询 `main` 最新 commit；即使版本号未变也检查提交：
 
-1. `https://api.github.com/repos/Gitfork300/xiaohongshu-skills-A2/commits?per_page=1`
-2. `https://api.github.com/repos/Gitfork300/xiaohongshu-skills-A2/commits?per_page=1&sha=main`
-3. `git ls-remote https://github.com/Gitfork300/xiaohongshu-skills-A2.git HEAD`（仅当 git 可用）
+1. `https://api.github.com/repos/Gitfork300/xiaohongshu-skills-A2/commits?per_page=1&sha=main`
+2. `git ls-remote https://github.com/Gitfork300/xiaohongshu-skills-A2.git refs/heads/main`（仅当 git 可用）
 
 ### 状态文件
 
@@ -109,8 +109,10 @@ python <patch>/helpers/update_check.py acknowledge --sha <commit-sha>
 
 版本号取自可信 Fork `pyproject.toml` 的 `[project].version`。每次到期检查只探测该
 小文件，并使用 HTTP ETag；若版本与状态文件相同（包括服务端返回 304），就记录本次
-检查时间并跳过 commit 查询。只有版本变化时才查询最新 commit 并提示评估。上游维护者
-应在需要触发同步评估时递增该版本号；仅提交代码但不改版本号的变更会被有意忽略。
+检查时间并继续查询 commit；不修改版本号的上游提交也会提示评估。新提交保存在
+`pending_sha`，直到经评估移植或记录不适用后使用 `acknowledge --sha` 确认。
+旧版状态只记录已发现提交，不能证明已评估；升级后首次检查会要求核对当前提交。
+状态文件损坏时检查会报错退出，不会静默重置待处理记录。
 
 ### 退出码
 
@@ -125,11 +127,11 @@ python <patch>/helpers/update_check.py acknowledge --sha <commit-sha>
 
 - **只读**：本脚本从不修改 bundled runtime 或 patch 文件（`diff-local` 也仅在系统临时目录解压）
 - **不自动合并**：检测到更新只通知，不动手
-- **重复提醒抑制**：距离上次成功提醒 < 1 天时不再重复输出
+- **持续提示**：待评估提交未确认时，`check` 在检查间隔内也返回 1；不得把已发现当成已移植。
 - **优雅降级**：无网/限流时退出 2/3，不影响其他流程
 - **`diff-local` 退出码 1 不等于有问题**：只要本地有定制，退出码必然是 1；应看清单内容而非退出码
 - **更新源固定为 `Gitfork300/xiaohongshu-skills-A2`**：检测只读该 Fork；发现提交只通知，不拉取、不覆盖。
-- **版本优先**：版本未变不查 commit；版本变化后才检查提交并通知。
+- **提交优先**：到期检查 `main` 的 commit，即使版本号未变也不会漏掉改动。
 - **只合并审核通过的改动**：非覆盖文件按需逐文件同步；覆盖文件先合并到 `core-overrides/overrides/` 再 apply，禁止整目录覆盖。
 
 ## 与主 skill 的冲突点
@@ -159,6 +161,8 @@ python <patch>/helpers/update_check.py acknowledge --sha <commit-sha>
 
 ## 修改记录
 
+- v1.5.0 (2026-11-06) 每次到期检查 main 提交；未确认的更新持续提示，避免版本号未变或仅已发现导致漏移植。
+- v1.4.1 (2026-11-06) 更新提示禁止直接 pull 和覆盖运行层，要求逐项评估移植。
 - v1.4.0 (2026-10-08) 增加 A2 `pyproject.toml` 项目版本探测和 ETag 缓存；版本未变时跳过 commit 查询。
 - v1.3.0 (2026-10-08) 更新可信源为 `Gitfork300/xiaohongshu-skills-A2`；说明该项目结构不同，只能经评估适配，不得整仓替换。
 - v1.2.0 (2026-10-08) 更新检查源切换为用户维护的 Fork，并明确只通知、不拉取；上游变更须评估后选择性合并。

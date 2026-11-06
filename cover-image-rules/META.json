@@ -1,7 +1,7 @@
 {
   "name": "cover-image-rules",
   "system": "publish",
-  "version": "1.7.0",
+  "version": "1.8.3",
   "patch_for": "red-book-skills",
   "applies_to_main_version": ">=0.1.0",
   "priority": 50,
@@ -12,6 +12,9 @@
   "files": [
     "SKILL.md",
     "helpers/check_cover_source.py",
-    "refs/01-detail.md"
+    "helpers/check_cover_unique.py",
+    "helpers/check_qr.py",
+    "refs/01-detail.md",
+    "refs/02-changelog.md"
   ]
 }

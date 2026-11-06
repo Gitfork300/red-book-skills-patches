@@ -84,7 +84,7 @@ patch: `timeliness-window`，活动/展会类必做，**最先做的闸门，按
 
 - 先 `publish-interval-guard` 的 `check --json`；
   若 `ready: false`，用 `wait --max-block 900` 阻塞至本次目标间隔满足
-  （8~12 分钟随机，由脚本抽签锁定）。
+  （6~14 分钟随机，由脚本抽签锁定）。
 
 ## 9. 发布（Windows 沙箱环境下用 patch: `windows-sandbox-workaround`）
 
@@ -116,7 +116,7 @@ scripts/cdp_publish.py publish --title "..." --content-file <正文> --images <�
   （**在队的不算漏发**）。
 - 看门狗报 `ALERT_MISSING` / `check_missing.py` 退出码 1 → **不得直接重发**：
   重新过第 2 步时效/资格/配额、第 5 步用词字数、第 6 步封面；
-  稿件不符合现行要求就**改稿**，合规后按 8~12 分钟随机间隔补发；
+  稿件不符合现行要求就**改稿**，合规后按 6~14 分钟随机间隔补发；
   时效或资格已不合格的登记 `pending_pool.json`。
 - 队列跑完（无论成败）必须**清空 `inflight.json`**，否则漏发复核永久失效。
 
@@ -131,11 +131,8 @@ scripts/cdp_publish.py publish --title "..." --content-file <正文> --images <�
 - 事实核查：时间、方向、数据、人物必须**双源核实**；时效性内容查 7 日内信源。
 - **应急事件双重禁令**：不伪造实拍，不生成「灾情实拍」画面。
 - **地图合规**：不画任何 AI 手绘的国界/海岸线/行政区划。
-- **活动稿末尾必须有打星评级块**（发布链硬闸门：缺行或写成 `★… 综合` 即拒发）：
-  首行 **`综合 ★…`**（**汉字在前、星级在后**），下接 `参与难度` / `适合人群` /
-  `专业性` / `活动规模` 四维（**括号只写事实，不写评价**）+ `来源：`。
-  **适合人群不打星**用标签。活动类**一律要有**，不因篇幅紧而省。
-- 来源标注：正文末尾列出信源 + 发布时间。
+- **打星评级块已于 2026-10-18 废除**，活动稿不再填写。
+- 来源标注：正文末尾列出信源 + 发布时间，`#话题标签`位于正文最后一行。
 
 ## 附：封面配图规范（patch: `cover-image-rules` 摘要）
 
@@ -155,10 +152,11 @@ scripts/cdp_publish.py publish --title "..." --content-file <正文> --images <�
 
 完整规则见 `../../publish-interval-guard/SKILL.md`。
 
-- 连续两篇笔记间隔 **8~12 分钟随机**（`[480, 720]` 秒），下限 8 分钟；
+- 连续两篇笔记间隔 **6~14 分钟随机**（`[360, 840]` 秒），下限 6 分钟；
   每篇 `record` 时抽签写入 `next_gap`，**多次 `check` 不会重新抽签**。
 - 起点 = `cdp_publish.py publish` 成功 **且** `verify-note --title` 返回 `found: true` 的时刻。
-- 状态文件位于 patch 自己的 `state/publish_log.json`（自包含，不污染主 skill）。
+- 状态文件默认位于 `<workspace>/.state/publish/publish_log.json`（2026-11-06 起移出 skill 树，
+  避免全量替换包覆盖历史台账）；路径权威为 `tools/runtime_paths.py`。
 - 与 `windows-sandbox-workaround` 集成：通过环境变量 `XHS_INTERVAL_GUARD` 指向 helper。
 
 ```bash

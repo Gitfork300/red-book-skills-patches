@@ -20,5 +20,8 @@ Windows 使用 `msvcrt.locking`，POSIX 使用 `fcntl.flock`；锁由句柄管�
 ## 兼容与调试
 
 历史脚本可能在 pipeline 自动 record 后再次调用 record；按 note_id 幂等是安全的。
-`wait --max-block` 必须不小于 720 秒，默认使用 900 秒。调试固定间隔可使用
+`wait --max-block` 必须不小于当前的 `--interval-max`（**2026-10-22 起为 1080 秒**），默认使用 2400 秒。
+注意 1920/1320/1080 这类数字会随间隔参数变更而变化，改 `DEFAULT_MIN/MAX` 时必须同步改 `DEFAULT_MAX_BLOCK`；
+当前 `DEFAULT_MIN=480 / DEFAULT_MAX=1080 / DEFAULT_MAX_BLOCK=2400`，改任一项都要同步本文件、`SKILL.md`
+与 `refs/02-changelog.md`。
 `record --interval 600`，但不得把调试参数带入正式批次。

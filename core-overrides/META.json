@@ -1,35 +1,55 @@
 {
   "name": "core-overrides",
   "system": "shared",
-  "version": "1.2.0",
+  "version": "1.5.4",
   "patch_for": "red-book-skills",
   "applies_to_main_version": ">=0.1.0",
   "priority": 2,
   "author": "Project maintainers",
   "created": "2026-09-12",
+  "updated": "2026-11-06",
   "dependencies": [],
   "conflict_points": [
-    "覆盖主 skill 的 SKILL.md 与 3 个 scripts/*.py；选择性合并 Fork 改动后需重新 apply"
+    "覆盖主 skill 的 INSTRUCTIONS.md、references/ 4 篇与 scripts/ 4 个脚本；选择性合并 Fork 改动后需重新 apply"
+  ],
+  "notes": [
+    "2026-11-06 补登记：files 与 overrides.targets 原漏 4 个 references 与 scripts/run_lock.py，覆盖目标实为 9 个；按旧清单打包的全量替换包只会带走 4/9，run_lock.py 丢失会退回旧式文件锁（B-041 同族竞态）。",
+    "apply/verify 的受管文件清单由 helpers/apply_overrides.py::_file_list() 遍历 overrides/ 生成，不读本文件；故本清单仅用于打包/交接核对，改它不改变 apply 行为。",
+    "scripts/run_lock.py 为纯本地新增（跨平台内核锁），已登记到 baseline.json，标记为上游无对应文件。"
   ],
   "files": [
     "SKILL.md",
+    "META.json",
     "baseline.json",
-    "overrides/SKILL.md",
+    "contracts.json",
+    "overrides/INSTRUCTIONS.md",
+    "overrides/references/01-publish-flow.md",
+    "overrides/references/03-constraints.md",
+    "overrides/references/04-pitfalls.md",
+    "overrides/references/05-patches-upstream.md",
     "overrides/scripts/cdp_publish.py",
     "overrides/scripts/chrome_launcher.py",
     "overrides/scripts/publish_pipeline.py",
-    "helpers/apply_overrides.py"
+    "overrides/scripts/run_lock.py",
+    "helpers/apply_overrides.py",
+    "helpers/tab_guard.py"
   ],
   "state_files": [
-    "state/applied.json"
+    "state/applied.json",
+    "state/README.md"
   ],
   "overrides": {
-    "desc": "覆盖层的权威副本；本体里的是应用产物",
+    "desc": "覆盖层的权威副本；本体里的是应用产物。共 9 个目标，缺一即 DRIFTED 或运行期回退。",
     "targets": [
-      "SKILL.md",
+      "INSTRUCTIONS.md",
+      "references/01-publish-flow.md",
+      "references/03-constraints.md",
+      "references/04-pitfalls.md",
+      "references/05-patches-upstream.md",
       "scripts/cdp_publish.py",
       "scripts/chrome_launcher.py",
-      "scripts/publish_pipeline.py"
+      "scripts/publish_pipeline.py",
+      "scripts/run_lock.py"
     ]
   },
   "baseline": {

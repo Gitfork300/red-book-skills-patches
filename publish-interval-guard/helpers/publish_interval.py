@@ -1,23 +1,28 @@
-"""发布间隔守卫 + 跨进程发布互斥 —— 连续两篇笔记之间必须间隔 8~12 分钟（随机）。
+"""发布间隔守卫 + 跨进程发布互斥 —— 连续两篇笔记之间必须间隔 6~14 分钟（随机）。
+
+> 版本沿革（用户拍板链）：
+>   2026-10-09 下界 8 → 11 分钟；2026-10-20 上界 32 → 22 分钟（23 篇/日 8h 收口档）。
+>   **2026-10-22 用户拍板：11–22 → 8–18 分钟（660–1320 → 480–1080 秒）**，
+>   同时发布窗口 8h → **累计 9h**。目的是在双榜双名额（最多 2 组翻倍、总 28 篇）
+>   之下仍能在窗口内自然收口，不必把起链时刻前移到夜里。
 
 为什么要独立成脚本：间隔判断依赖"上一次成功发布"的真实时间戳，
 而 agent 自身的会话时间感不可靠（跨调用、上下文压缩、长任务等待都会失真）。
 把时间戳落盘，由脚本裁定，才不会凭印象提前发。
 
 为什么要随机：固定 10 分钟这种"整齐"的节奏本身就是机器特征。
-每次发布后在 [480, 720] 秒之间抽一个目标间隔（8~12 分钟），
+每次发布后在 [360, 840] 秒之间抽一个目标间隔（6~14 分钟），
 落在记录里（next_gap），由脚本锁定，避免反复 check 时抖动。
 
-存储位置：本 patch 自己的 state/ 目录（不依赖主 skill 的 tmp/）。
-这样未来重装主 skill、迁移 patch、跨机器同步都不会丢记录。
+存储位置：默认业务工作区 `.state/publish/`，迁移期间可读取旧 state/ 台账。
 
 用法：
   check                     距上次发布是否已满足本次目标间隔；exit 0 = 可发布，exit 1 = 需等待
   check --json              同上，输出机器可读结果
   wait                      阻塞等待到可发布；exit 0 = 可发布，exit 1 = 仍未满足（超出 max-block）
-  wait --max-block 900      最长阻塞秒数，默认 900
+  wait --max-block 2400    最长阻塞秒数，默认 2400（须 ≥ --interval-max，否则长间隔会提前超时）
   reserve --title "标题"     原子「检查 + 占位」，拿到发布资格；exit 0 = 可发（并输出 reserve_id）
-  reserve --max-block 900   间隔未满时最多阻塞等待多久（默认 0 = 立刻返回 exit 1）
+  reserve --max-block 2400  间隔未满时最多阻塞等待多久（默认 0 = 立刻返回 exit 1）
   release --reserve-id ID   撤销占位（发布失败时调用；未实际发布，不该占用间隔）
   record --title "标题"      记录一次"已审核的成功发布"（仅在 publish 成功、且 verify-note 确认后调用）
   record --note-id ID --title "标题" --reserve-id ID
@@ -25,8 +30,8 @@
   last                      查看上次发布时间、本次目标间隔与还需等待的秒数
 
 间隔参数：
-  --interval-min N   随机下界，默认 480（8 分钟）
-  --interval-max N   随机上界，默认 720（12 分钟）
+  --interval-min N   随机下界，默认 360（6 分钟）
+  --interval-max N   随机上界，默认 840（14 分钟）
   --interval N       固定间隔（覆盖随机），用于特殊场景/回放
   --seed N           指定随机种子（仅调试/自测，正式发布不要用）
 
@@ -35,7 +40,7 @@
 
 与编排层集成：
   通过环境变量 XHS_INTERVAL_GUARD 指向本脚本，xhs_login_wait.py 会自动调用 reserve/record。
-  直接调用本脚本时，存储路径取决于 <patch>/state/publish_log.json。
+  直接调用本脚本时，存储路径由 tools/runtime_paths.py 解析。
 
 ──── v1.4.0（2026-09-17）跨进程互斥 ────────────────────────────────
 原实现只有 check/wait（**只读**）+ record（**事后补账**），中间隔着整条发布流程。
@@ -82,17 +87,37 @@ from contextlib import contextmanager
 from datetime import datetime
 
 PATCH_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-# 可用 XHS_INTERVAL_STATE_DIR 把台账/锁重定向到别处（自测、回放、多账号隔离用）；
-# 不设时就是 patch 自己的 state/，与历史行为一致。
-STATE_DIR = os.environ.get("XHS_INTERVAL_STATE_DIR") or os.path.join(PATCH_ROOT, "state")
-LOG = os.path.join(STATE_DIR, "publish_log.json")
-LOCK = os.path.join(STATE_DIR, ".guard.lock")
+PATCHES_ROOT = os.path.dirname(PATCH_ROOT)
 
-DEFAULT_MIN = 480          # 8 分钟
-DEFAULT_MAX = 720          # 12 分钟
-DEFAULT_MAX_BLOCK = 900
+
+sys.path.insert(0, os.path.join(PATCHES_ROOT, "tools"))
+import runtime_paths as _PATHS
+
+# 覆盖优先级：显式 env（自测/回放/多账号隔离）> 工作区状态根 > 树内旧址（兜底）
+if os.environ.get("XHS_INTERVAL_STATE_DIR"):
+    STATE_DIR = os.environ["XHS_INTERVAL_STATE_DIR"]
+    LOG = os.path.join(STATE_DIR, "publish_log.json")
+    LOCK = os.path.join(STATE_DIR, ".guard.lock")
+else:
+    # resolve_publish_log 在新址不存在时回落旧址：迁移未完成的机器仍读得到历史台账，
+    # 否则「新址空台账」会让同标题拦截与间隔判断同时失效（等于当天可能重发）。
+    LOG = _PATHS.resolve_publish_log()
+    STATE_DIR = os.path.dirname(LOG)
+    LOCK = os.environ.get("XHS_GUARD_LOCK") or os.path.join(STATE_DIR, ".guard.lock")
+
+DEFAULT_MIN = 360          # 6 分钟（2026-10-31 用户拍板：由 8 分钟下调，配合 06:00 硬收口）
+DEFAULT_MAX = 840          # 14 分钟（2026-10-31 用户拍板：由 18 分钟下调，均值 10 分钟）
+# 阻塞上限必须盖住最大可能间隔，否则抽到长间隔时会误返回「间隔未满足」
+DEFAULT_MAX_BLOCK = 2400   # 仍 ≥ DEFAULT_MAX(840)，无需下调
 DEFAULT_PENDING_TTL = 1800  # 占位最长存活 30 分钟（实测单次发布最慢约 10 分钟）
-DEFAULT_LOCK_TIMEOUT = 20   # 等锁上限（持锁方只做毫秒级读写）
+# 等锁上限 60 秒（原 20 秒，B-058 放宽）。
+# 为什么 60s 依然安全：持锁方只在锁内做 publish_log.json 的**毫秒级读-改-写**，
+# 从不横跨发布流程（跨进程发布互斥由 reserve 写下的 pending 占位承担），
+# 正常持有时间远小于 1 秒。放宽只是用来吸收**瞬时竞争** —— 20s 窗口内 LK_NBLCK
+# 反复失败就会抛 Errno 13，被上层误判成「间隔未到」而白扔整轮发布窗口。
+# 即使真出现异常持有者，60s 最坏也只是让本次 reserve 多等一会，
+# 仍远小于 --max-block 1920 和档间等待 180s，不会拖垮整链。
+DEFAULT_LOCK_TIMEOUT = 60
 
 EXIT_OK = 0
 EXIT_WAIT = 1
@@ -134,9 +159,11 @@ def _load():
     try:
         with open(LOG, encoding="utf-8") as f:
             data = json.load(f)
-    except Exception:
-        return []
-    return data if isinstance(data, list) else []
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"无法读取发布台账 {LOG}: {exc}") from exc
+    if not isinstance(data, list) or not all(isinstance(item, dict) for item in data):
+        raise ValueError(f"发布台账格式无效: {LOG}")
+    return data
 
 
 def _save(records):
@@ -257,6 +284,7 @@ def _file_lock(timeout=DEFAULT_LOCK_TIMEOUT):
       - 锁文件常驻磁盘（这很正常），只为承载锁而存在。
     """
     os.makedirs(STATE_DIR, exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(LOCK)), exist_ok=True)
     fd = os.open(LOCK, os.O_CREAT | os.O_RDWR, 0o600)
     deadline = time.time() + max(0, timeout)
     try:
@@ -700,12 +728,12 @@ def cmd_last(args):
 
 
 def main():
-    p = argparse.ArgumentParser(description="小红书连续发布间隔守卫 + 跨进程互斥（8~12 分钟随机）")
+    p = argparse.ArgumentParser(description="小红书连续发布间隔守卫 + 跨进程互斥（6~14 分钟随机）")
     p.add_argument("action",
                    choices=["check", "wait", "reserve", "release", "record", "reset", "last"])
     p.add_argument("--interval", type=int, default=None, help="固定间隔秒数（覆盖随机）")
-    p.add_argument("--interval-min", type=int, default=None, help="随机下界秒数，默认 480")
-    p.add_argument("--interval-max", type=int, default=None, help="随机上界秒数，默认 720")
+    p.add_argument("--interval-min", type=int, default=None, help="随机下界秒数，默认 360")
+    p.add_argument("--interval-max", type=int, default=None, help="随机上界秒数，默认 840")
     p.add_argument("--max-block", type=int, default=None)
     p.add_argument("--note-id", default=None)
     p.add_argument("--title", default=None)
@@ -736,6 +764,9 @@ def main():
     except LockTimeout as e:
         print(f"LOCK_TIMEOUT: {e}", file=sys.stderr)
         return EXIT_LOCK_TIMEOUT
+    except (OSError, ValueError) as e:
+        print(f"FAIL 发布间隔守卫：{e}", file=sys.stderr)
+        return EXIT_ARG
 
 
 if __name__ == "__main__":

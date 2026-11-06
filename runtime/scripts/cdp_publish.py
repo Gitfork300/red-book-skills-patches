@@ -175,8 +175,15 @@ MAX_TIMING_JITTER_RATIO = 0.7
 # This must be longer than a single polling tick in _wait_for_uploaded_images.
 CDP_COMMAND_TIMEOUT = 45.0
 DEFAULT_LOGIN_CACHE_TTL_HOURS = 12.0
+# 运行态临时产物默认落在 skill 树的 runtime/tmp/ —— 2026-11-06 起改由环境变量
+# XHS_RUNTIME_TMP 决定（venv 的 sitecustomize 会指向 <workspace>/.state/tmp）：
+# 全量替换包会连 tmp 一起覆盖，缓存留在树内等于升级即丢；未设时仍回落旧路径，
+# 保证单独拷走本脚本也能跑。
 LOGIN_CACHE_FILE = os.path.abspath(
-    os.path.join(SCRIPT_DIR, "..", "tmp", "login_status_cache.json")
+    os.path.join(
+        os.environ.get("XHS_RUNTIME_TMP") or os.path.join(SCRIPT_DIR, "..", "tmp"),
+        "login_status_cache.json",
+    )
 )
 
 
@@ -529,6 +536,101 @@ class XiaohongshuPublisher:
                 else:
                     raise CDPError(f"Cannot reach Chrome on {self.host}:{self.port}: {e}")
 
+    # --- 页签守卫（B-057；2026-10-25 升级为全局上限）--------------------
+    # 用户铁律（2026-10-25）：「任何阶段的浏览器页签都不要超过 10，避免卡顿」。
+    # 旧版只卡单实例 10 个：两个实例（9222 评论 / 9333 发布）合计仍可到 20。
+    TAB_GUARD_MAX = 10          # 全局 page tab 上限（9222 + 9333 合计，任何阶段）
+    TAB_GUARD_KEEP_AFTER = 9    # 回收后总量（给即将新建的这个 tab 留 1 个余量）
+    TAB_GUARD_PORTS = (9222, 9333)   # 评论实例 + 发布实例（+ 自身端口若不在表内）
+    TAB_GUARD_KEEP_NEWEST = {
+        9333: 3,                # 发布实例：最新 2-3 个可能是发布/verify 在用的 tab
+        9222: 1,                # 评论实例：留 1 个（notification 着陆页）
+    }
+    TAB_GUARD_PROTECTED = (
+        "https://creator.xiaohongshu.com/login",   # 可能正用于人工扫码
+    )
+
+    def _guard_tabs(self, pages: list[dict] | None = None,
+                    protect_prefix: str = "") -> None:
+        """全局页签守卫：任一实例新建 tab 前，合计达到 TAB_GUARD_MAX 即回收最旧页。
+
+        - 统计范围：TAB_GUARD_PORTS（9222 评论 + 9333 发布）+ 自身端口；
+        - 触发时机：合计 ≥ TAB_GUARD_MAX（新建前），回收至 ≤ TAB_GUARD_KEEP_AFTER，
+          保证新建后全局仍 ≤ 10；
+        - 回收顺序：各实例 `/json` 顺序即创建顺序（最早在前），只回收每实例
+          「最新 TAB_GUARD_KEEP_NEWEST[port] 个」之后的旧页，全局最旧优先；
+        - 保护：TAB_GUARD_PROTECTED 前缀不关；**protect_prefix 匹配的页也不关**
+          （B-108：这轮正要复用的页必须活下来）；
+        - 每实例至少留 1 个 page（关掉最后一个 tab 会导致 Chrome 整体退出）；
+        - 安全性：调用点是 `_find_or_create_tab` 取完快照、尚未建立 WebSocket 时，
+          因此不会关掉本轮正在连的页；连中的页有自己的 ws，关的是空闲残留页。
+
+        B-108 补充：Chrome 的 `/json/list` **顺序不等于创建顺序**，回收出来的
+        「最旧页」可能是本轮正要复用的那一页 → 连接被立刻关闭，表现为
+        `CDPError: no close frame received or sent`。故按 URL 前缀保护本轮目标页。
+        """
+        ports = list(self.TAB_GUARD_PORTS)
+        if self.port not in ports:
+            ports.append(self.port)
+        proxies = (
+            {"http": None, "https": None} if _is_local_host(self.host) else None
+        )
+
+        snap: dict[int, list[dict]] = {}
+        for p in ports:
+            if p == self.port and pages is not None:
+                snap[p] = [t for t in pages if t.get("type") == "page"]
+                continue
+            try:
+                r = requests.get(
+                    f"http://{self.host}:{p}/json/list", timeout=5, proxies=proxies
+                )
+                snap[p] = [
+                    t for t in r.json()
+                    if t.get("type") == "page" and t.get("webSocketDebuggerUrl")
+                ]
+            except Exception:
+                snap[p] = []
+
+        total = sum(len(v) for v in snap.values())
+        if total < self.TAB_GUARD_MAX:
+            return
+
+        # 候选：各实例保留最新 N 个后的旧页（最早在前）；受保护前缀跳过
+        candidates: list[tuple[int, dict]] = []
+        for p in ports:
+            keep = max(1, self.TAB_GUARD_KEEP_NEWEST.get(p, 1))
+            pool = snap[p]
+            for t in pool[: max(0, len(pool) - keep)]:
+                u = t.get("url") or ""
+                if any(u.startswith(pre) for pre in self.TAB_GUARD_PROTECTED):
+                    continue
+                if protect_prefix and u.startswith(protect_prefix):
+                    continue
+                candidates.append((p, t))
+
+        closed = 0
+        for p, t in candidates:
+            if total - closed <= self.TAB_GUARD_KEEP_AFTER:
+                break
+            try:
+                requests.get(
+                    f"http://{self.host}:{p}/json/close/{t['id']}",
+                    timeout=3,
+                    proxies=proxies,
+                )
+                closed += 1
+            except Exception as e:
+                print(
+                    f"[cdp_publish] tab_guard: 关闭 {str(t.get('id', ''))[:8]} 失败: {e}"
+                )
+        if closed:
+            print(
+                f"[cdp_publish] tab_guard: 全局 page tab {total} ≥ "
+                f"{self.TAB_GUARD_MAX}，回收最旧 {closed} 个"
+                f"（发布实例留最新3/评论实例留最新1，login 不碰）"
+            )
+
     def _find_or_create_tab(
         self,
         target_url_prefix: str = "",
@@ -547,8 +649,33 @@ class XiaohongshuPublisher:
             if t.get("type") == "page" and t.get("webSocketDebuggerUrl")
         ]
 
+        # 页签守卫（B-057 根治；2026-10-25 升级为全局上限）：
+        # 本函数每次发布都 PUT /json/new 建新 tab 却从不关闭，历史上一天堆 30+ 个
+        # page tab，吃内存并助推 Chrome 崩溃（B-056）。
+        # 现口径（用户铁律）：任何阶段 9222+9333 全局 page tab ≤ 10，
+        # 新建前合计达标即回收最旧残留页（发布实例留最新 3、评论实例留最新 1）。
+        # B-108：本轮要复用的目标页必须免回收（否则会连到刚被关掉的页）。
+        self._guard_tabs(pages, protect_prefix=target_url_prefix)
+
+        # B-107 根治（2026-10-27）：_guard_tabs 可能关闭本页签快照里的页，
+        # 之后仍拿**过期快照**去匹配 target_url_prefix，会连到刚被关掉的页，
+        # 表现为 `CDPError: no close frame received or sent`。
+        # 修法：守卫跑完后**重新拉一次快照**，并从最新的匹配页签开始选，
+        # 避免拿到已被回收的 ws 地址；匹配到的页在连上前再验一次存活。
         if target_url_prefix:
-            for t in pages:
+            try:
+                fresh = [
+                    t for t in self._get_targets()
+                    if t.get("type") == "page" and t.get("webSocketDebuggerUrl")
+                ]
+            except Exception:
+                fresh = []
+            if fresh:
+                pages = fresh
+
+        if target_url_prefix:
+            # 从最新往回找：守卫保留的是每实例「最新 N 个」，最新的页最可能存活
+            for t in reversed(pages):
                 if t.get("url", "").startswith(target_url_prefix):
                     print(
                         "[cdp_publish] Reusing matching target tab: "

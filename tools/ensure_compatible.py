@@ -24,6 +24,32 @@ DEFAULT_MAIN = PATCH_ROOT / "runtime"
 APPLY = PATCH_ROOT / "core-overrides" / "helpers" / "apply_overrides.py"
 POST_SYNC = PATCH_ROOT / "tools" / "post_sync_check.py"
 CACHE = PATCH_ROOT / "state" / "compatibility.json"
+
+
+def _portable_path(path: Path) -> str:
+    """把路径压成「相对 PATCH_ROOT」的写法，供缓存与指纹使用。
+
+    为什么不能存绝对路径（2026-11-06 用户裁定）：缓存里记 `C:/Users/<某机>/...`，
+    换机器或换目录后这份缓存要么假绿、要么每次重算；指纹里混入绝对路径还会让
+    「同一份代码」在不同机器上得出不同指纹，等于缓存永远失效。
+    """
+    try:
+        return path.resolve().relative_to(PATCH_ROOT.resolve()).as_posix()
+    except (ValueError, OSError):
+        return path.name
+
+
+def _cache_path() -> Path:
+    """缓存位置：env 覆盖 > 工作区 `.state/cache`（迁移期回落树内旧址）。
+
+    权威见 `tools/runtime_paths.py`。缓存属运行态，不能随 skill 包分发。
+    """
+    override = os.environ.get("XHS_COMPAT_CACHE")
+    if override:
+        return Path(override)
+    import runtime_paths
+
+    return Path(runtime_paths.resolve_compat_cache())
 def run(args: list[str], *, check: bool = False) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         args,
@@ -66,13 +92,28 @@ def check_upstream_root(main: Path) -> str | None:
     skill_text = (PATCH_ROOT / "SKILL.md").read_text(encoding="utf-8", errors="replace")
     if "name: red-book-skills-patch" not in skill_text:
         return "Patch 入口 SKILL.md 元数据无效"
-    for module in ("requests", "websockets"):
+    for module in ("requests", "websockets", "cv2", "PIL"):
         if importlib.util.find_spec(module) is None:
             return (
-                f"当前 Python 环境缺少 {module}；请先运行 "
-                f"'{sys.executable} {PATCH_ROOT / 'tools' / 'setup_runtime.py'}'"
+                f"当前 Python 环境缺少 {module}；确认正在使用 Skill 的 .venv。"
+                "若环境已存在，请保留并按 RUNTIME_SETUP.md 排查和安全迁移；"
+                "仅首次安装时运行 tools/setup_runtime.py。"
             )
     return None
+
+
+# 生成物（__pycache__ / .pyc …）不参与指纹与覆盖比对。
+# 否则任何一次 import / py_compile 都会让指纹变化、状态永久 DRIFTED，
+# 表现为「这个 skill 每次跑都报错」。与 apply_overrides.py 保持同一套规则。
+IGNORE_DIR_NAMES = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ipynb_checkpoints"}
+IGNORE_SUFFIXES = (".pyc", ".pyo", ".pyd", ".bak", ".orig", ".tmp", ".swp")
+IGNORE_FILE_NAMES = {".DS_Store", "Thumbs.db"}
+
+
+def _is_generated(path: Path) -> bool:
+    if any(part in IGNORE_DIR_NAMES for part in path.parts):
+        return True
+    return path.name in IGNORE_FILE_NAMES or path.name.lower().endswith(IGNORE_SUFFIXES)
 
 
 def _hash_file(path: Path) -> str:
@@ -97,12 +138,14 @@ def _fingerprint(main: Path) -> str:
         main / "scripts" / "run_lock.py",
     ]
     digest = hashlib.sha256()
-    digest.update(str(main).encode("utf-8"))
+    # 只用相对路径参与指纹：绝对路径会把「同一份代码」在不同机器上算成不同指纹
+    digest.update(_portable_path(main).encode("utf-8"))
     paths = list(fixed_paths)
     overrides = PATCH_ROOT / "core-overrides" / "overrides"
-    paths.extend(sorted(path for path in overrides.rglob("*") if path.is_file()))
+    paths.extend(sorted(path for path in overrides.rglob("*")
+                        if path.is_file() and not _is_generated(path)))
     for path in paths:
-        digest.update(str(path).encode("utf-8"))
+        digest.update(_portable_path(path).encode("utf-8"))
         digest.update(
             _hash_file(path).encode("ascii") if path.is_file() else b"missing"
         )
@@ -111,34 +154,56 @@ def _fingerprint(main: Path) -> str:
 
 def _load_cache(main: Path, fingerprint: str) -> bool:
     try:
-        data = json.loads(CACHE.read_text(encoding="utf-8"))
+        data = json.loads(_cache_path().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return False
     return (
         data.get("status") == "ok"
-        and data.get("main") == str(main)
+        and data.get("main_rel") == _portable_path(main)
         and data.get("fingerprint") == fingerprint
     )
 
 
 def _save_cache(main: Path, fingerprint: str) -> None:
-    CACHE.parent.mkdir(parents=True, exist_ok=True)
+    cache = _cache_path()
+    cache.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "status": "ok",
-        "main": str(main),
+        "main_rel": _portable_path(main),
         "fingerprint": fingerprint,
         "checked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     }
-    temporary = CACHE.with_suffix(".tmp")
+    temporary = cache.with_suffix(".tmp")
     temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    temporary.replace(CACHE)
+    temporary.replace(cache)
 
 
 def apply_and_verify() -> tuple[bool, str]:
-    status = run([sys.executable, str(APPLY), "status"])
-    status_text = f"{status.stdout}\n{status.stderr}"
-    if "DRIFTED" in status_text:
-        return False, "检测到本体或覆盖层被直接改动（DRIFTED），拒绝自动覆盖"
+    # 先清掉覆盖层里的编译缓存（自愈）：.pyc 内嵌路径与 mtime，
+    # 混入清单会造成永久 DRIFTED，是本门禁最常见的假故障源。
+    clean = run([sys.executable, str(APPLY), "clean"])
+    if clean.returncode != 0:
+        return False, clean.stdout or clean.stderr or "覆盖层生成物清理失败"
+
+    # 用结构化输出判定，而不是在整段文本里搜 "DRIFTED"
+    # —— 后者会被说明文字、路径名里的同名目录误伤。
+    status = run([sys.executable, str(APPLY), "status", "--json"])
+    if status.returncode not in (0, 1):
+        return False, status.stderr or status.stdout or "无法检查覆盖层状态"
+    try:
+        data = json.loads(status.stdout)
+    except ValueError:
+        return False, ("覆盖层状态无法解析（apply_overrides.py 可能失败了）：\n"
+                       + (status.stdout or status.stderr or "").strip())
+    drifted = [f["path"] for f in data.get("files", []) if f.get("status") == "DRIFTED"]
+    if drifted:
+        return False, (
+            "检测到本体被直接改动（DRIFTED），拒绝自动覆盖：\n  " + "\n  ".join(drifted)
+            + "\n  处置：把改动搬进 core-overrides/overrides/ 后重跑；"
+              "若确认是生成物，运行 "
+              f"'{sys.executable} {APPLY} clean'"
+        )
+
     applied = run([sys.executable, str(APPLY), "apply"])
     if applied.returncode != 0:
         return False, applied.stdout or applied.stderr

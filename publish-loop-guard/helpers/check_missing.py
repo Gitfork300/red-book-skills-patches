@@ -34,7 +34,7 @@
   2 = 参数或环境错误
 
 环境变量：
-  XHS_WORKSPACE      工作区根目录（换机器必设），默认 ~/xhs-workspace
+  XHS_WORKSPACE      工作区根目录，默认 C:/xhs（换机器可用它覆盖）
   XHS_DRAFT_DIR      稿件目录，默认 <workspace>/xhs_publish
   XHS_INTERVAL_LOG   发布日志，默认 <patches>/publish-interval-guard/state/publish_log.json
   XHS_PENDING_POOL   待发池，默认 <patches>/timeliness-window/state/pending_pool.json
@@ -54,11 +54,29 @@ PATCH_ROOT = os.path.normpath(os.path.join(HERE, ".."))          # <patch>/publi
 PATCHES_ROOT = os.path.normpath(os.path.join(PATCH_ROOT, ".."))  # <skills>/red-book-skills-patches
 SKILLS_ROOT = os.path.normpath(os.path.join(PATCHES_ROOT, ".."))
 
-WS_DEFAULT = os.environ.get("XHS_WORKSPACE") or os.path.expanduser("~/xhs-workspace")
+WS_DEFAULT = os.environ.get("XHS_WORKSPACE") or "C:/xhs"
 DRAFT_DIR = os.environ.get("XHS_DRAFT_DIR") or os.path.join(WS_DEFAULT, "xhs_publish")
-LOG_PATH = os.environ.get("XHS_INTERVAL_LOG") or os.path.join(
-    PATCHES_ROOT, "publish-interval-guard", "state", "publish_log.json"
-)
+def _log_path() -> str:
+    """发布台账路径：env 覆盖 > 工作区 `.state`（迁移期可回落树内旧址）。
+
+    权威在 `<patches>/tools/runtime_paths.py`；state 不进 skill 树（2026-11-06 用户裁定）。
+    """
+    override = os.environ.get("XHS_INTERVAL_LOG")
+    if override:
+        return override
+    try:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "_xhs_runtime_paths", os.path.join(PATCHES_ROOT, "tools", "runtime_paths.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.resolve_publish_log()
+    except Exception:
+        return os.path.join(PATCHES_ROOT, "publish-interval-guard", "state", "publish_log.json")
+
+
+LOG_PATH = _log_path()
 POOL_PATH = os.environ.get("XHS_PENDING_POOL") or os.path.join(
     PATCHES_ROOT, "timeliness-window", "state", "pending_pool.json"
 )

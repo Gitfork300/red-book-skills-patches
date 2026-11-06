@@ -8,7 +8,7 @@
 
 - **实现与权威覆盖副本分离**：运行代码随仓库分发；受管改动放 `core-overrides/overrides/` 再 apply。
 - **每个 patch 是独立 skill**：有自己的 `SKILL.md` + 可选 `helpers/` + `META.json`
-- **状态文件自包含**：每个 patch 的状态（间隔记录、更新状态等）放在 patch 自己的 `state/`，不污染主 skill
+- **本机状态隔离**：发布台账和锁默认位于工作区 `.state/publish/`；其他状态依各 patch 的路径说明存放，不随源码发布
 - **可逐项启用/禁用**：通过 `<patch>/META.json` 中的 `priority` 字段控制加载顺序；删除目录即可停用
 - **可逐项升级**：未来增改 patch 不影响主 skill
 - **更新提示而非自动合并**：update-checker 只检测上游，不修改任何文件
@@ -23,27 +23,29 @@
 > | --- | --- | --- |
 > | **发布** | `publish` | `writing-facts-only`、`safe-wording-guard`、`cover-image-rules`、`timeliness-window`、`organizer-qualification-guard`、`publish-preflight-guard`、`publish-interval-guard`、`publish-loop-guard` |
 > | **评论** | `comment` | `comment-reply-guard` |
-> | **共用基座** | `shared` | `core-overrides`、`update-checker`、`windows-sandbox-workaround`、`xhs-risk-guard`、`tools` |
+> | **共用基座** | `shared` | `core-overrides`、`update-checker`、`windows-sandbox-workaround`、`xhs-risk-guard`、`daily-closeout-guard`、`tools` |
 >
 > **改哪个体系只动哪套 skill**；确需跨体系生效的规则，必须先在 `SYSTEMS.md` 交叉点清单登记，
 > 再在两边的 SKILL.md 互相指向。
 
-| # | Patch | 优先级 | 版本 | 用途 | 配套脚本 |
+| # | Patch | 优先级 | 版本 | 用途 | 规则入口 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | `core-overrides` | 2 | 1.2.0 | **随仓库 runtime 的权威覆盖层**：发布页蜜罐防护、风控响应分类、Chrome 沙箱脱离、间隔记录和操作说明 | `helpers/apply_overrides.py` |
-| 2 | `update-checker` | 5 | 1.4.0 | 可选检测 A2 Fork 更新；版本未变则跳过 commit 查询，另含 `diff-local` 映射差异/覆盖冲突；只通知，不参与日常运行 | `helpers/update_check.py` |
-| 3 | `windows-sandbox-workaround` | 10 | 1.7.0 | Windows 沙箱/受限会话适配 + 进程/探活/网络可达性排查坑位 + **登录态与风控规则索引** + 无人值守巡检失败停止与新鲜度核验 | `helpers/xhs_login_wait.py`, `helpers/xhs_focus.ps1`, `helpers/net_probe.py` |
-| 3.5 | `comment-reply-guard` | 11 | 1.22.0 | **评论体系**：评论 / 私信的读取与回复 —— 回复标记、报名网址、提醒登记、**每日回复配额制（回复量/当日评论量 ≥50%，2026-09-29 由 80% 下调，question>correction>eval>chat，评价类仅在配额不足时补，达标即停）**、**回复文案零废话（禁「感谢分享/仅供参考」类客套，评价类须带话题相关实质内容）**、Tab/内存守护、读取节流、2 天笔记窗口、历史快照合并、私信已回判定与 DOM 适配、mentions 失效后的新定位路径、收件箱直答与风控处置、**昵称是 AI展会叻**、**发评论必须 CDP 真实事件**、**点封面图/mentions 抓包取 note_id**、**核验必须先展开折叠的子评论（否则假阴性→重发）** | — |
-| 4 | `xhs-risk-guard` | 12 | 1.3.0 | **小红书风控规则单一权威**（读取限流 / 登录态 / 接口签名 / 「假风控」四域总表）+ **可执行守卫**（预算·冷却·连续失败熔断） | `helpers/risk_state.py` |
-| 5 | `safe-wording-guard` | 15 | 0.7.0 | 规避站外导流等敏感词，**正文一律不出现网址/裸域名**；**标题 20 上限按「字宽」计**；**标题不写序号（①/（一）/系列N，P0）**；含涉港澳台表述规范 | `helpers/check_wording.py` |
-| 6 | `publish-interval-guard` | 20 | 1.4.1 | 连续发布间隔 **8~12 分钟随机**（下限 8 分钟）；**`record` 按 note_id 幂等**；**`state/publish_log.json` 是 100 条环形缓冲 —— 不得用条目数当「当日已发篇数」**；**verify-note 判据＝`found:true`（不是 grep "SUCCESS"），摘要只取 stdout**；**`reserve`/`release` 发布资格抢占（堵 TOCTOU 并发重复发布）** | `helpers/publish_interval.py` |
-| 7 | `timeliness-window` | 22 | 1.9.0 | **会展活动只发江浙沪/珠三角；只发近 7 天在举行 / 需报名的活动（专题系列 15 天）；无直播且公众无法报名的不发（邀请制可发）；恶劣天气类每日 ≤1 篇，红 / 黑色预警放宽至 3 篇；天气稿不得跨日顺延；专题未闭幕不得停更（停止/切换＝闭幕日 T+2）** | `helpers/geo_check.py`, `helpers/check_window.py`, `helpers/quota_check.py` |
-| 7.5 | `organizer-qualification-guard` | 23 | 1.3.0 | **主办资质闸门**：活动/展会/论坛类须事业单位/行业龙头/行业协会牵头的中大型活动且正文有含金量；付费小班/价格/私企黑名单/无合规主办方 → 硬拒（第 16 项） | `helpers/check_organizer.py` |
-| 8 | `publish-preflight-guard` | 25 | 1.20.0 | **发布前 19 项总检查 + 批量队列控制**；第 3+4 项资格 UNKNOWN 硬阻断；第 19 项校验专题全名及有效期；非活动稿须声明 `non_activity`；必需标题/正文文件无效即报错 | `helpers/batch_preflight.py` |
-| 9 | `publish-loop-guard` | 28 | 1.10.0 | **「启动」触发词自动检索发布 + 每 30 分钟漏发复核（只看最近几日/第一页）+ 按事件查重（三道信号：事件标识／公共子串／**地点+日期**；类别化窗口：A 类当天／行业类 **7 天**／其他 15 天，优先级 A>行业>其他；`--series` 只放宽公共子串，不放宽第三道信号；**发布链重试前必须 verify 防重复发布**）+ 长批次硬停止时间 + 合规审计（全量清单 + 正文核验，含风控熔断）+ 专题全名标记到期拦截** | `helpers/check_missing.py`, `helpers/watch_missing.py`, `helpers/dup_check.py`, `helpers/recent_published.py`, `helpers/list_all_notes.py`, `helpers/read_note_body.py` |
-| 10 | `writing-facts-only` | 30 | 1.6.2 | 只陈述事实；标题要说内容；活动须写参与方式；分页统计需确认记录不重复并按稳定键去重 | — |
-| 11 | `cover-image-rules` | 50 | 1.7.0 | 封面配图规范（真实感优先、禁二维码/人物/完整人形机器人）；**展会/活动类官方宣传图 ≥80% 硬闸门（台账 + `check_cover_source.py`）**；防止源图拉伸与标题重绘 | `helpers/check_cover_source.py` |
+| 1 | `core-overrides` | 2 | 1.5.4 | 运行层权威覆盖与页签守卫 | [SKILL.md](./core-overrides/SKILL.md) |
+| 2 | `update-checker` | 5 | 1.5.0 | 上游更新检测与差异评估 | [SKILL.md](./update-checker/SKILL.md) |
+| 3 | `windows-sandbox-workaround` | 10 | 1.7.0 | Windows 环境和进程兼容 | [SKILL.md](./windows-sandbox-workaround/SKILL.md) |
+| 3.5 | `comment-reply-guard` | 11 | 1.24.1 | 评论、私信和回复规则 | [SKILL.md](./comment-reply-guard/SKILL.md) |
+| 4 | `xhs-risk-guard` | 12 | 1.3.0 | 平台风控及访问守卫 | [SKILL.md](./xhs-risk-guard/SKILL.md) |
+| 5 | `safe-wording-guard` | 15 | 0.8.0 | 文案用词和标题规范 | [SKILL.md](./safe-wording-guard/SKILL.md) |
+| 6 | `publish-interval-guard` | 20 | 1.6.1 | 发布间隔及并发保护 | [SKILL.md](./publish-interval-guard/SKILL.md) |
+| 7 | `timeliness-window` | 22 | 1.9.1 | 时效、地域及配额门禁 | [SKILL.md](./timeliness-window/SKILL.md) |
+| 7.5 | `organizer-qualification-guard` | 23 | 1.3.0 | 活动主办资质门禁 | [SKILL.md](./organizer-qualification-guard/SKILL.md) |
+| 8 | `publish-preflight-guard` | 25 | 1.20.0 | 发布前检查及批量预检 | [SKILL.md](./publish-preflight-guard/SKILL.md) |
+| 9 | `publish-loop-guard` | 28 | 1.13.3 | 发布流程、查重与漏发复核 | [SKILL.md](./publish-loop-guard/SKILL.md) |
+| 10 | `writing-facts-only` | 30 | 1.6.2 | 事实写作与内容规范 | [SKILL.md](./writing-facts-only/SKILL.md) |
+| 11 | `cover-image-rules` | 50 | 1.8.3 | 封面来源、去重与二维码门禁 | [SKILL.md](./cover-image-rules/SKILL.md) |
+| 12 | `daily-closeout-guard` | 60 | 1.4.1 | 日终收口及问题登记 | [SKILL.md](./daily-closeout-guard/SKILL.md) |
 
+版本列供 `tools/check_patch_versions.py` 校验；具体规则与脚本以各 Patch 入口和 `META.json` 为准。
 加载顺序：低优先级先加载（被后者叠加）。
 
 ## 加载方式
@@ -54,6 +56,18 @@
 `core-overrides` 将权威修复应用到本仓库的 bundled runtime。
 
 ## 快速检查
+
+```bash
+# 环境与变量自检（装机后先跑这个，主动暴露缺口）
+python tools/check_env.py --fix-hint
+
+# 一键体检（首选）：先自愈（清覆盖层编译缓存），再依次跑环境自检、覆盖层、契约、
+# 版本登记、文档分层、回归测试、发布安全门禁
+python tools/doctor.py
+```
+
+退出码：0 全通过 / 1 仅警告 / 2 有阻断项（先处理再发布）。分步排查时再跑下面这些。
+常见问题见 [`HELP.md`](./HELP.md)。
 
 ```bash
 # 列出本仓库目录
@@ -82,11 +96,11 @@ python tools/check_public_release.py
 
 > 规范权威见 **`DOC_LAYOUT.md`**（拆任何 md 之前先读）；校验跑 `tools/check_doc_layers.py`（拆完必跑）。
 > 三层模型：L0 主入口（铁律+索引，≤6000 字符/180 行）→ L1 详情（`refs/`，≤9000/260）→ L2 归档（日志/快照）。
-> 第 0 铁律（针对本体覆盖层）：**覆盖层不持有上游内容副本**——上游命令/流程/参数指向上游文档（如本体 `README.md`），否则主体更新后 `apply` 会把旧快照覆盖回去 = 回退上游改动。
+> 受管 runtime 文件的完整权威副本位于 `core-overrides/overrides/`；更新时须先评估 A2 差异并择优移植到权威副本，再审查和应用，不能盲目将旧上游快照覆盖当前实现。
 
 已全部拆分（2026-09-15 收尾）：
 - 本体 `SKILL.md` → `references/` 4 个
-- 工作区 `MEMORY.md` → `topics/` 9 个
+- 工作区 `MEMORY.md` → `topics/` 15 个（`00`~`14`）+ `QUICKREF.md`（规则速查卡，随 skill 分发，敏感信息已占位）
 - 8 个 patch `SKILL.md` → 各自 `refs/`：comment-reply-guard / windows-sandbox-workaround / publish-loop-guard / timeliness-window / publish-preflight-guard / writing-facts-only / xhs-risk-guard / safe-wording-guard
 
 ## 独立运行结构
@@ -99,7 +113,7 @@ python tools/check_public_release.py
    ├── runtime/references/    ← 操作细节（不注册成额外 skill）
    ├── runtime/INSTRUCTIONS.md ← 详细运行规则
    ├── core-overrides/        ← bundled runtime 的权威覆盖副本
-   ├── requirements.txt       ← 仅 requests 与 websockets
+   ├── requirements.txt       ← requests、websockets、opencv-python、Pillow
    └── ...                    ← patch 规则、状态守卫与本地工具
 ```
 
@@ -129,15 +143,19 @@ python tools/check_public_release.py
 
 ## 版本备份（防丢失）
 
-`tools/backup_snapshots.py` 把**bundled runtime 与 Patch 工作区**打包成快照落到 `~/xhs-workspace/_skill-backup/`。
-完整说明（为什么不能只靠 git、去重、排除项、失败告警）见 **[`UPGRADING.md`](./UPGRADING.md)「版本备份」**。已挂每日 10:00 自动备份任务。
+`tools/backup_snapshots.py` 把**bundled runtime 与 Patch 工作区**打包到 `C:/xhs/_skill-backup/`，
+并将发布台账与封面二维码白名单另存为业务状态快照；`state/` JSON 不进入源码包。
+完整说明（去重、排除项、失败告警）见 **[`UPGRADING.md`](./UPGRADING.md)「本机快照备份」**。
+Local Agent Host 已配置每日 10:00 运行备份。快照为本机明文文件，同盘备份不替代异机/离线备份。
 
 ## 变更记录归档
 
 本文件只维护当前加载契约、patch 清单和操作入口，不重复保存事故复盘或逐版本 changelog。
 
-- 各 patch 的历史变更放在对应的 `refs/*changelog*.md`。
+- 各 patch 的现行事故速查与历史记录指针留在 `refs/`；完整 changelog / incident 原文归档于 [`history/`](./history/README.md)，不作为当前规则加载。
 - 体系边界和跨体系冲突只看 [`SYSTEMS.md`](./SYSTEMS.md)。
 - 文档分层和体量限制只看 [`DOC_LAYOUT.md`](./DOC_LAYOUT.md)。
 - 上游同步、备份和回滚流程只看 [`UPGRADING.md`](./UPGRADING.md)。
+- 安装、变量、登录态、门禁等常见问题自助排查看 [`HELP.md`](./HELP.md)。
+- **版本升级的待办、口径冲突、回滚点与升级记录只看 [`HANDOVER.md`](./HANDOVER.md)**（交接给下一个 agent 时先读它）。
 - 修改版本时同步更新 `SKILL.md`、`META.json`、本表版本列，并运行 `tools/check_patch_versions.py`。

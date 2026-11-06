@@ -19,7 +19,7 @@
 3. **按事件查重**（`publish-loop-guard/helpers/dup_check.py --title "..."`，退出码 0 才继续）
 4. 合格选题 → 写稿 → 用词字数预检 → 生成封面（真实感、无人物/二维码/人形机器人/地图）→ 17 项总检查
 5. 写入 `inflight.json`，起 `watch_missing.py` 看门狗
-6. 按 **8~12 分钟随机间隔**逐篇发布，每篇 `verify-note` 通过才计间隔
+6. 按 **6~14 分钟随机间隔**逐篇发布，每篇 `verify-note` 通过才计间隔
 7. 逐篇回报 `note_id`，全部结束后清空 `inflight.json` 并报总表
 
 完整规则见 patch：`../../publish-loop-guard/SKILL.md`

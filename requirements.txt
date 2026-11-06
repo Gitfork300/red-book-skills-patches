@@ -1,2 +1,6 @@
 requests>=2.28.0
 websockets>=12.0
+# 2026-10-23（B-101）：cover-image-rules/helpers/check_qr.py 依赖 opencv 的
+# QRCodeDetector 做二维码定位+解码。缺库时该门禁必须**显式失败**，不能静默跳过。
+opencv-python>=4.8.0
+Pillow>=9.0.0

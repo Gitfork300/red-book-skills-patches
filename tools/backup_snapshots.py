@@ -7,10 +7,10 @@ red-book-skills 定期版本备份（工作区真实快照，含未提交/未跟
       - 未跟踪文件：helpers/README.md、scripts/xhs_publish_fail.png
       - 被 .gitignore 排除的文件（config/ 下的配置）
       - 工作区里 4 个 modified 的覆盖产物（HEAD 是纯上游，改动没提交）
-    所以这里对**工作区目录**做 tar 快照，把 .git 目录一并打进去 ——
-    解压即得到"带完整 git 历史的完整工作区"，恢复成本最低。
+    所以这里对**工作区目录**做 tar 快照；不包含 .git 与凭据，
+    恢复时需另行获取 Git 仓库，不能将该快照当作 Git 历史备份。
 
-备份产物结构（默认 DEST = ~/xhs-workspace/_skill-backup/）：
+备份产物结构（默认 DEST = C:/xhs/_skill-backup/）：
     README.md                     恢复说明（脚本自动生成/维护）
     latest.json                   最近一次成功的指纹与快照路径
     FAILED.txt                    仅失败时存在，成功即删除（失败信号）
@@ -19,9 +19,14 @@ red-book-skills 定期版本备份（工作区真实快照，含未提交/未跟
         META.json                 时间、指纹、两仓 git HEAD、文件数、体积、排除项
         body.tar.gz               本体工作区（排除 .venv/tmp/__pycache__ 等）
         patches.tar.gz            补丁仓工作区（排除 __pycache__ 等）
+    business-state/snapshots/<ts>_<fp16>/
+        publish_log.json          业务台账（存在时）
+        qr_whitelist.json         封面二维码白名单（存在时）
+        MANIFEST.json             来源路径与 SHA-256
 
 去重：内容指纹（逐文件 sha256 聚合）与上次一致 → 不留新快照，直接跳过。
 轮转：只保留最近 --keep 个快照（默认 30），更旧的本工具自己删。
+业务状态快照独立保留，不随源码快照轮转；其中可能包含业务数据，勿公开或提交。
 
 用法：
     python backup_snapshots.py                 # 常规运行（无变化则跳过）
@@ -50,30 +55,29 @@ from datetime import datetime
 HOME = os.path.expanduser("~")
 PATCH = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 BODY = os.path.join(PATCH, "runtime")
-DEFAULT_DEST = os.path.join(HOME, "xhs-workspace", "_skill-backup")
+DEFAULT_DEST = os.path.join("C:/xhs", "_skill-backup")
 
 # 排除规则：dirnames 按目录名任意层级匹配；rel_prefixes 按相对路径前缀；globs 按文件名
 RULES = {
     "body": {
-        "dirnames": {".venv", "venv", "tmp", "__pycache__", ".pytest_cache", "node_modules"},
+        "dirnames": {".git", ".venv", "venv", "tmp", "__pycache__", ".pytest_cache", "node_modules"},
         "rel_prefixes": (),
         "globs": ("*.pyc", "*.pyo", "*.bak", "*.swp", "*.log"),
     },
     "patches": {
-        "dirnames": {".venv", "__pycache__", ".pytest_cache", "node_modules"},
+        "dirnames": {".git", ".venv", "__pycache__", ".pytest_cache", "node_modules"},
         # 2026-10-07 起 apply 前备份已移到工作区外的 _skill-backup/，
         # 仓库内不再生成；保留此前缀仅为历史遗留兜底。
-        "rel_prefixes": ("core-overrides/state/backup",),
-        "globs": ("*.pyc", "*.pyo", "*.bak", "*.swp"),
+        "rel_prefixes": ("core-overrides/state/backup", "runtime/tmp"),
+        "globs": ("*.pyc", "*.pyo", "*.bak", "*.swp", "*.log"),
     },
 }
 
-# 凭据类文件：默认不纳入备份（本目录可能被云同步/分享）。
-# 想连它一起备份，把下面改为 True。
-INCLUDE_CREDENTIALS = False
-CREDENTIAL_FILES = ("config/accounts.json",)
-
-
+# 凭据和浏览器 profile 不纳入版本快照，即使它们嵌套在仓库中。
+PRIVATE_DIRS = {"session", "sessions", "auth", "credentials", "profiles",
+                "browser-profile", "chrome-profile"}
+PRIVATE_FILES = {"accounts.json", "cookies.json", "credentials.json", "auth.json",
+                 "session.json"}
 def out(msg=""):
     try:
         print(msg)
@@ -112,7 +116,8 @@ def collect(root, rule):
         rel_dir = os.path.relpath(dirpath, root).replace(os.sep, "/")
         rel_dir = "" if rel_dir == "." else rel_dir
         # 目录级排除
-        dirnames[:] = sorted(d for d in dirnames if d not in rule["dirnames"])
+        dirnames[:] = sorted(d for d in dirnames
+                             if d not in rule["dirnames"] and d.lower() not in PRIVATE_DIRS)
         if rel_dir:
             if any(rel_dir == p or rel_dir.startswith(p + "/") for p in rule["rel_prefixes"]):
                 dirnames[:] = []
@@ -122,9 +127,14 @@ def collect(root, rule):
                 continue
         for fn in sorted(filenames):
             rel = (rel_dir + "/" + fn) if rel_dir else fn
+            parts = rel.replace("\\", "/").split("/")
+            if "state" in parts and fn not in ("README.md", ".gitkeep"):
+                continue
             if any(fnmatch.fnmatch(fn, g) for g in rule["globs"]):
                 continue
-            if not INCLUDE_CREDENTIALS and root == BODY and rel in CREDENTIAL_FILES:
+            if rel in ("scripts/xhs_publish_fail.png", "runtime/scripts/xhs_publish_fail.png"):
+                continue
+            if fn.lower() in PRIVATE_FILES or fn.lower().endswith((".cookie", ".cookies")):
                 continue
             files.append((os.path.join(dirpath, fn), rel))
     return files
@@ -177,6 +187,72 @@ def verify_tar(tar_path, files, arc_base):
     if bad:
         return False, "内容不一致(%d 个，例: %s)" % (len(bad), bad[:3])
     return True, "OK (%d 文件全部一致)" % len(expected)
+
+
+def business_state_sources():
+    workspace = os.environ.get("XHS_WORKSPACE", "C:/xhs")
+    state_root = os.environ.get("XHS_STATE_ROOT", os.path.join(workspace, ".state"))
+    publish_log = os.environ.get(
+        "XHS_INTERVAL_LOG",
+        os.path.join(state_root, "publish", "publish_log.json"),
+    )
+    if not os.path.isfile(publish_log):
+        legacy_log = os.path.join(PATCH, "publish-interval-guard", "state", "publish_log.json")
+        publish_log = legacy_log if os.path.isfile(legacy_log) else publish_log
+
+    qr_whitelist = os.environ.get(
+        "XHS_QR_WHITELIST",
+        os.path.join(state_root, "covers", "qr_whitelist.json"),
+    )
+    return [("publish_log.json", publish_log), ("qr_whitelist.json", qr_whitelist)]
+
+
+def backup_business_state(dest, sources=None):
+    sources = business_state_sources() if sources is None else sources
+    available = [(name, path) for name, path in sources if os.path.isfile(path)]
+    missing = [name for name, path in sources if not os.path.isfile(path)]
+    if not available:
+        out("[state-skip] 未找到业务台账或白名单")
+        return None
+
+    state_root = os.path.join(dest, "business-state", "snapshots")
+    os.makedirs(state_root, exist_ok=True)
+    manifest_files = {}
+    for name, path in available:
+        manifest_files[name] = {
+            "source": os.path.abspath(path),
+            "sha256": sha256_file(path),
+        }
+    digest = hashlib.sha256(
+        json.dumps(manifest_files, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    ).hexdigest()[:16]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    snapshot_name = "%s_%s" % (timestamp, digest)
+    snapshot_dir = os.path.join(state_root, snapshot_name)
+    stage_dir = snapshot_dir + ".part"
+    os.mkdir(stage_dir)
+    try:
+        for name, path in available:
+            target = os.path.join(stage_dir, name)
+            shutil.copy2(path, target)
+            if sha256_file(target) != manifest_files[name]["sha256"]:
+                raise RuntimeError("业务状态备份校验失败: %s" % name)
+        write_json(os.path.join(stage_dir, "MANIFEST.json"), {
+            "created_at": datetime.now().astimezone().isoformat(),
+            "files": manifest_files,
+            "missing_optional_files": missing,
+        })
+        os.rename(stage_dir, snapshot_dir)
+    except Exception:
+        shutil.rmtree(stage_dir, ignore_errors=True)
+        raise
+
+    out("[state-ok] %s | 文件: %s | 未找到: %s" % (
+        snapshot_dir,
+        ", ".join(name for name, _ in available),
+        ", ".join(missing) or "无",
+    ))
+    return snapshot_dir
 
 
 def human(n):
@@ -300,19 +376,21 @@ def make_readme(dest):
 
 ## 里面是什么
 
-每个 `snapshots/<时间戳>_<指纹>/` 是一份完整可恢复的快照：
+每个 `snapshots/<时间戳>_<指纹>/` 是一份源码和规则快照，不包含 Git 历史或业务状态的完整备份：
 
 | 文件 | 内容 |
 | --- | --- |
 | `body.tar.gz` | 本仓库 `runtime/` 执行代码与操作参考 |
-| `patches.tar.gz` | 本仓库规则、工具、状态说明和覆盖权威副本 |
+| `patches.tar.gz` | 本仓库规则、工具、状态目录说明和覆盖权威副本（不含 `state/` JSON） |
 | `META.json` | 生成时间、内容指纹、仓库 git HEAD、文件数、体积、当时生效的排除规则 |
+| `business-state/snapshots/<时间戳>_<指纹>/` | 发布台账和二维码白名单的独立副本（文件存在时），带 SHA-256 清单 |
 
 排除项（可重建，不进备份）：runtime 的 `tmp/ __pycache__/ .pytest_cache/`、
 Patch 的 `.venv/` 与 `core-overrides/state/backup/`（2026-10-07 起已移到
-`~/xhs-workspace/_skill-backup/core-overrides-preapply/`，此处仅为历史兜底）、
+`C:/xhs/_skill-backup/core-overrides-preapply/`，此处仅为历史兜底）、
 `*.pyc/*.bak/*.swp`。
-`config/accounts.json`（凭据）默认**不在**备份内，如需纳入见脚本顶部 `INCLUDE_CREDENTIALS`。
+`.git`、账号配置、Cookie、凭据、浏览器 profile 和各 `state/` 目录里的 JSON 不进入源码快照；
+发布台账及二维码白名单写到独立业务状态快照。该目录是明文且默认与源数据同机，不能代替异机/离线备份。
 
 ## 怎么恢复
 
@@ -372,6 +450,7 @@ def do_backup(dest, keep, force):
     os.makedirs(dest, exist_ok=True)
     os.makedirs(os.path.join(dest, "snapshots"), exist_ok=True)
     make_readme(dest)
+    business_state_snapshot = backup_business_state(dest)
 
     body_files = collect(BODY, RULES["body"])
     patch_files = collect(PATCH, RULES["patches"])
@@ -402,7 +481,8 @@ def do_backup(dest, keep, force):
         out("[skip] " + msg)
         log_line(dest, "SKIP " + msg)
         clear_alerts(dest)         # 上轮可能失败；这轮探测通过 → 撤告警
-        return {"status": "skip", "fingerprint": combined}
+        return {"status": "skip", "fingerprint": combined,
+                "business_state_snapshot": business_state_snapshot}
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     name = "%s_%s" % (ts, combined)
@@ -464,8 +544,9 @@ def do_backup(dest, keep, force):
                 "body_dirnames": sorted(RULES["body"]["dirnames"]),
                 "patches_dirnames": sorted(RULES["patches"]["dirnames"]),
                 "patches_rel_prefixes": list(RULES["patches"]["rel_prefixes"]),
+                "patches_state_files": "all files in state/ except README.md and .gitkeep",
                 "globs": sorted(set(RULES["body"]["globs"]) | set(RULES["patches"]["globs"])),
-                "credentials_included": INCLUDE_CREDENTIALS,
+                "credentials_included": False,
             },
             "tool": "red-book-skills-patches/tools/backup_snapshots.py",
         }
@@ -499,7 +580,8 @@ def do_backup(dest, keep, force):
     out("[ok] " + msg)
     log_line(dest, "OK " + msg)
     return {"status": "created", "snapshot": snap_dir, "fingerprint": combined,
-            "bytes": total, "removed": removed}
+            "bytes": total, "removed": removed,
+            "business_state_snapshot": business_state_snapshot}
 
 
 def do_list(dest):

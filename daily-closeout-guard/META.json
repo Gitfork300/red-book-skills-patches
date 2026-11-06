@@ -1,0 +1,32 @@
+{
+  "name": "daily-closeout-guard",
+  "system": "shared",
+  "version": "1.4.1",
+  "patch_for": "red-book-skills",
+  "applies_to_main_version": ">=0.1.0",
+  "priority": 60,
+  "author": "Project maintainers",
+  "created": "2026-10-15",
+  "dependencies": [
+    "publish-loop-guard",
+    "windows-sandbox-workaround"
+  ],
+  "conflict_points": [
+    {
+      "with": "publish-loop-guard",
+      "description": "两者都读发布进度。本 patch 只读 `_NNNN_pub_progress.json` 核账，不补发、不改状态。",
+      "resolution": "收尾不新增发布；漏发仍由 publish-loop-guard 的 check_missing/watch_missing 处理"
+    },
+    {
+      "with": "publish-interval-guard",
+      "description": "收尾不读 publish_log.json 条目数当篇数（100 条环形缓冲）。",
+      "resolution": "篇数一律以 `_NNNN_pub_progress.json` 为准，标记行（circuit_break）不计"
+    }
+  ],
+  "files": [
+    "SKILL.md",
+    "refs/01-detail.md",
+    "helpers/bug_ledger.py"
+  ],
+  "state_files": []
+}

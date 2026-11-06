@@ -42,8 +42,8 @@
 
 1. **硬限制必须留在 L0，一字不省。**
    可下沉的只有：原因解释、事故案例、脚本参数表、历史版本记录、长示例。
-   ❌ 错误示范：把「间隔 ≥8 分钟」挪进 reference，主体只留「发布节奏见 reference」。
-   ✅ 正确：主体留「发布间隔 ≥8 分钟（下限硬约束）」，reference 里放随机上界算法、幂等实现、历史调整原因。
+   ❌ 错误示范：把「间隔 ≥6 分钟」挪进 reference，主体只留「发布节奏见 reference」。
+   ✅ 正确：主体留「发布间隔 ≥6 分钟（下限硬约束）」，reference 里放随机上界算法、幂等实现、历史调整原因。
 2. **每条规则在 L0 只留一行结论，不展开。** 展开部分用 `→` 指向 L1 文件。
 3. **L1 文件必须有 `read_when`**。顶部 frontmatter 或首行注明「什么场景才需要读本文件」，
    否则没人知道该不该读。
@@ -101,8 +101,8 @@ L0 里固定一张表，每行 = 一个 L1 文件 + `read_when` 触发条件：
 
 | 文件 | 现状（字符 / 行） | 状态 |
 | --- | --- | --- |
-| `core-overrides/overrides/SKILL.md`（本体主入口） | 5983 / 159 | ✅ **已拆**（+ `references/01,03,04,05`），已纳入校验 |
-| 工作区 `MEMORY.md` | 1371 / 36 | ✅ **已拆**（+ `topics/01~09`），已纳入校验 |
+| `core-overrides/overrides/INSTRUCTIONS.md`（本体主入口） | 5983 / 159 | ✅ **已拆**（+ `references/01,03,04,05`），已纳入校验 |
+| 工作区 `MEMORY.md` | 1371 / 36 | ✅ **已拆**（+ `topics/01~09`），已纳入校验；另随 skill 分发 `topics/00~14`+`QUICKREF.md`（规则知识副本，端口占位脱敏） |
 | `publish-loop-guard/SKILL.md` | 14438 / 386 | ⬜ 待拆（最大） |
 | `windows-sandbox-workaround/SKILL.md` | 10529 / 293 | ⬜ 待拆 |
 | `timeliness-window/SKILL.md` | 10313 / 295 | ⬜ 待拆 |
@@ -142,7 +142,7 @@ A2 仓库使用不同目录/接口，更新只作择优评估，不能整仓替�
 且**锚点只覆盖声明过的词** —— 未声明的内容被挪走，机器**不会报**。所以必须人工过一遍：
 
 1. **三版对照**
-   - 拆分前：`~/xhs-workspace/_skill-backup/core-overrides-preapply/<时间戳>/SKILL.md`
+   - 拆分前：`C:/xhs/_skill-backup/core-overrides-preapply/<时间戳>/SKILL.md`
      （每次 `apply` 自动留；2026-10-07 起移出技能树，原因见 core-overrides/SKILL.md）
    - 拆分后：主入口 + 全部 `references/*.md` **拼接后**统计
    - 上游原版：`git show HEAD:SKILL.md`
@@ -198,5 +198,6 @@ A2 仓库使用不同目录/接口，更新只作择优评估，不能整仓替�
    去重时核对：内容是否已在正确归属处；是 → 留一处权威 + 其余改指针。
 3. **运行时数据不入库**：`state/*.json`、`logs/` 是日抛数据（每次运行都变），
    已在 `.gitignore`；版本快照由 `tools/backup_snapshots.py` 承担。
+   Patch changelog 与 incident 原文保存在仓库根 `history/patches/`；Skill 内只保留现行事故三列表和历史指针。
 4. **tools 单一职责**：`backup_snapshots.py`（快照）、`check_doc_layers.py` + `doc_layers.json`（分层校验）、
    `check_patch_versions.py`（版本一致性）、`post_sync_check.py`（上游同步后契约/BREAKING 探测）——各司其职，不合并、不复制。

@@ -9,7 +9,7 @@
 用法：
   check                   若距上次检查 >= 间隔则执行；否则直接 exit 0
   check-now               强制立即检查（忽略间隔）
-  check                   版本未变时只探测 pyproject.toml，不查询 commit
+  check                   到期时检查版本和最新 commit
   status                  打印 state/update_state.json 的可读摘要
   diff-local              下载上游快照，逐文件对比 bundled runtime（忽略行尾/BOM）
   set-interval <秒>       调整检查间隔（默认 604800 = 7 天）
@@ -49,15 +49,12 @@ GITHUB_API = "https://api.github.com"
 UPSTREAM_VERSION_URL = f"https://raw.githubusercontent.com/{REPO}/main/pyproject.toml"
 GIT_LS_REMOTE = f"https://github.com/{REPO}.git"
 DEFAULT_INTERVAL = 7 * 24 * 3600
-NOTIFY_COOLDOWN = 24 * 3600  # 同 sha 提醒冷却
-
 USER_AGENT = "xhs-update-checker/1.4"
 
 # 对比时跳过的目录：运行时产物，不属于 skill 源码，比了只会刷屏
 DIFF_SKIP_DIRS = {".git", ".venv", "venv", "__pycache__", "tmp", ".pytest_cache", "node_modules"}
 
 ENDPOINTS = [
-    f"{GITHUB_API}/repos/{REPO}/commits?per_page=1",
     f"{GITHUB_API}/repos/{REPO}/commits?per_page=1&sha=main",
 ]
 
@@ -91,10 +88,12 @@ def _load_state():
     try:
         with open(STATE_FILE, encoding="utf-8") as f:
             d = json.load(f)
-        d.setdefault("interval_sec", DEFAULT_INTERVAL)
-        return d
-    except Exception:
-        return {"interval_sec": DEFAULT_INTERVAL}
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"无法读取上游更新状态 {STATE_FILE}：{exc}") from exc
+    if not isinstance(d, dict):
+        raise RuntimeError(f"上游更新状态格式无效（应为对象）：{STATE_FILE}")
+    d.setdefault("interval_sec", DEFAULT_INTERVAL)
+    return d
 
 
 def _save_state(d):
@@ -118,7 +117,7 @@ def _http_get_json(url, timeout=10):
 def _git_ls_remote():
     try:
         out = subprocess.run(
-            ["git", "ls-remote", GIT_LS_REMOTE, "HEAD"],
+            ["git", "ls-remote", GIT_LS_REMOTE, "refs/heads/main"],
             capture_output=True, text=True, encoding="utf-8",
             errors="replace", timeout=15,
         )
@@ -204,6 +203,9 @@ def cmd_check(args):
     interval = state.get("interval_sec", DEFAULT_INTERVAL)
     last_check = state.get("last_check_epoch", 0) or 0
     if not args.now and (_now() - last_check) < interval:
+        if state.get("pending_sha"):
+            print(f"上游更新待评估：{state['pending_sha']}；评估完成后使用 acknowledge --sha")
+            return 1
         print(f"距上次检查仅 {_fmt(_now() - last_check)}，未到间隔 ({interval}s)，跳过")
         print("如需立即检查，加 --now")
         return 0
@@ -228,18 +230,7 @@ def _do_check(state):
 
     version = version_info["version"]
     known_version = state.get("last_known_version")
-    if known_version == version:
-        state.update({
-            "last_check_epoch": _now(),
-            "last_check_iso": _iso(_now()),
-            "last_check_status": "ok",
-            "upstream_version_etag": version_info.get("etag"),
-        })
-        _save_state(state)
-        print(f"上游版本未变：{version}；跳过 commit 查询")
-        return 0
-
-    print(f"上游版本变化：{known_version or '(无记录)'} → {version}")
+    print(f"上游版本：{known_version or '(无记录)'} → {version}")
     print("=== 检查可信 Fork 最新 commit ===", flush=True)
     try:
         latest = fetch_latest()
@@ -256,6 +247,15 @@ def _do_check(state):
         return 2 if status == "network_error" else 3
 
     sha = latest["sha"]
+    if not sha:
+        state.update({
+            "last_check_epoch": _now(),
+            "last_check_iso": _iso(_now()),
+            "last_check_status": "network_error",
+        })
+        _save_state(state)
+        print("!! 检查失败：上游未返回 commit SHA")
+        return 2
     iso = latest.get("iso")
     msg = latest.get("message", "")
     last_known = state.get("last_known_sha")
@@ -271,25 +271,15 @@ def _do_check(state):
         "last_known_message": msg,
     })
 
-    if last_known == sha:
+    if "pending_sha" not in state or last_known != sha:
+        state["pending_sha"] = sha
+    if state.get("pending_sha") != sha:
         print(f"已是最新：{sha[:10]}  {msg}")
         _save_state(state)
         return 0
 
-    # 有更新
-    last_notified = state.get("last_notified_sha")
-    cooldown_ok = (last_notified != sha)
-    if last_notified and (last_known and (sha != last_known)):
-        # last_known 是旧的、last_notified 可能是更旧——以 _now-last_notified_ts 的时间戳比较
-        # 简化：直接用 cooldown_ok 标记
-        pass
     state["last_notified_sha"] = sha
     _save_state(state)
-
-    if not cooldown_ok:
-        # 实际几乎不会走到这里——cooldown 在 last_notified==sha 时为 False
-        print("检测到更新但冷却期未过，跳过提醒")
-        return 0
 
     print("=== UPDATE_AVAILABLE ===", flush=True)
     print(f"可信 Fork: {REPO}")
@@ -299,10 +289,10 @@ def _do_check(state):
     print(f"  标题    : {msg}")
     print(f"  本地最后: {last_known or '(无记录)'}")
     print()
-    print("如何合并（详见 update-checker SKILL.md）：")
-    print("  1. 评估影响范围（小改直接 pull；BREAKING 暂停使用）")
-    print("  2. 查 patches/*/META.json 的 applies_to_main_version 是否还满足")
-    print("  3. 合并完成后：acknowledge --sha", sha)
+    print("如何评估（详见 update-checker SKILL.md 和 UPGRADING.md）：")
+    print("  1. 使用 diff-local 评估映射差异，不要直接 pull 或整仓覆盖运行层")
+    print("  2. 逐项审阅并适配需要引入的改动，核对契约和测试")
+    print("  3. 评估完成后：acknowledge --sha", sha)
     return 1
 
 
@@ -534,6 +524,7 @@ def cmd_status(args):
     if state.get("last_known_message"):
         print(f"                 : {state['last_known_message']}")
     print(f"  last_notify  : {state.get('last_notified_sha') or '(never)'}")
+    print(f"  pending      : {state.get('pending_sha') or '(none)'}")
     if state.get("last_check_epoch"):
         next_due = state["last_check_epoch"] + state.get("interval_sec", DEFAULT_INTERVAL)
         if _now() < next_due:
@@ -553,7 +544,12 @@ def cmd_set_interval(args):
 
 def cmd_acknowledge(args):
     state = _load_state()
+    if state.get("pending_sha") and args.sha != state["pending_sha"]:
+        print(f"!! 待评估提交为 {state['pending_sha']}，拒绝确认其他提交", file=sys.stderr)
+        return 2
     state["last_notified_sha"] = args.sha
+    if state.get("pending_sha") == args.sha:
+        state["pending_sha"] = None
     _save_state(state)
     print(f"已标记 {args.sha[:10]} 为已读，下次检查起将不再重复提醒此 commit")
     return 0
@@ -595,4 +591,8 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except RuntimeError as exc:
+        print(f"!! {exc}", file=sys.stderr)
+        sys.exit(2)

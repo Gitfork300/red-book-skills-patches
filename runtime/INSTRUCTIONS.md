@@ -25,24 +25,24 @@ metadata:
 | `core-overrides` | **bundled runtime 覆盖层**：对仓库内执行源码的改动 | 2 |
 | `update-checker` | 检查可信 Fork；diff-local 只读比对，不自动合并 | 5 |
 | `windows-sandbox-workaround` | Windows 沙箱/受限会话适配（含网络可达性探测） | 10 |
-| `safe-wording-guard` | 规避站外导流敏感词；**正文不出现网址/裸域名**；**标题 20 按字宽**；**核心 200–600 / 全篇 <1000 字** | 15 |
-| `publish-interval-guard` | 连续发布间隔 **8~12 分钟随机**（下限 8 分钟） | 20 |
-| `timeliness-window` | **会展只发江浙沪/珠三角**；窗口 [D, D+7]；无直播不发；天气每日 ≤1（红/黑 3），不跨日 | 22 |
+| `safe-wording-guard` | 规避站外导流敏感词；**正文不出现网址/裸域名**；**标题20 按字宽**；**核心200–600 / 全篇<1000 字** | 15 |
+| `publish-interval-guard` | 连续发布间隔 **6~14 分钟随机**（下限 6 分钟） | 20 |
+| `timeliness-window` | **会展只发江浙沪/珠三角**；窗口 [D, D+7]；无直播不发；天气每日≤1（红/黑3），不跨日 | 22 |
 | `organizer-qualification-guard` | **主办资质闸门**：非合规主办方/卖课内训 → 硬拒 | 23 |
-| `publish-preflight-guard` | 发布前 **19 项**总检查 + 批量队列控制 | 25 |
+| `publish-preflight-guard` | 发布前**19 项**总检查+批量队列控制 | 25 |
 | `publish-loop-guard` | **「启动」触发词自动检索发布 + 每 30 分钟漏发复核 + 按事件查重** | 28 |
-| `writing-facts-only` | 只陈述事实；标题说内容；活动写参与方式；末尾带评级块 | 30 |
+| `writing-facts-only` | 只陈述事实；标题说内容；活动写参与方式；不写评级块（2026-10-18 起） | 30 |
 | `cover-image-rules` | 封面规范（真实感优先、禁二维码/人物/人形机器人） | 50 |
 
-加载顺序：低优先级先加载，被后者叠加。**每篇发布都必须按 patch 规则过闸。**
+加载顺序：低优先级先加载，被后者叠加。**每篇发布都必须按patch 规则过闸。**
 
 > **关于本文件**：本文件及 `scripts/` 下 3 个脚本是 `core-overrides` 的**覆盖产物**，
 > 权威副本在 `core-overrides/overrides/`。**不要直接改本体** ——
-> 改规则请改覆盖层再 `apply_overrides.py apply`，直接改会变 `DRIFTED` 并在同步时丢失。
+> 改规则改覆盖层再 `apply_overrides.py apply`，直接改会变 `DRIFTED` 并在同步时丢失。
 
 ## 风险提示（重要）
 
-**自动化发布存在被平台风控、限流、封号或封禁账号的风险。**
+**自动化发布存在被平台风控、限流、封号或封禁的风险。**
 默认提醒用户用测试号、小流量运行，并对最终内容人工复核。风险由使用者承担。
 
 ## 输入判断（按优先级）
@@ -58,23 +58,23 @@ metadata:
 - 发布前必须让用户确认最终标题、正文、图片/视频。
 - 图文**没图不得发布**；视频没视频不得发布；**图片视频不可混用**。
 - 默认无头；检测到未登录则切有窗口模式登录。
-- 统一用 Patch 根目录 venv 解释器：Windows `../.venv/Scripts/python.exe`，
-  macOS/Linux `../.venv/bin/python`（从 `runtime/` 运行时）。系统 Python 缺 `websockets.sync`
-  属连接前错误；先运行 `tools/setup_runtime.py`，再使用仓库 `.venv`。
+- 从 `runtime/` 使用专用解释器：Windows `../.venv/Scripts/python.exe`、
+  macOS/Linux `../.venv/bin/python`。缺 `websockets.sync` 是连接前错误；
+  仅首次安装运行 `tools/setup_runtime.py`，已有环境不得自动更新，异常见 `RUNTIME_SETUP.md`。
 - **标题 ≤20 字宽**（汉字/全角=1、英文/数字/半角=0.5，按 18 留余量）。
   ⚠️ 上游残留的「≤38」口径**已被 patch 作废**。
 - 「仅测试浏览器」时**不得触发发布命令**。路径一律用绝对路径。
 - **发布成功判据＝观察到 `POST /web_api/sns/v2/note` 成功响应**；仅按钮点击不得报告成功。
 - 发布后必须 `verify-note --title "最终标题"`，以笔记管理页「审核中 / 已发布 / 未通过」为准。
 - **`click-publish` 必须提供 `--title`**（脚本据此拒绝错误表单/标签页）。
-- 连续两篇间隔 **≥8 分钟**（8~12 分钟随机），起点＝上一次成功发布
+- 连续两篇间隔 **≥6 分钟**（6~14 分钟随机），起点＝上一次成功发布
   **且** `verify-note` 返回 `found: true` 的时刻。一律走 `helpers/publish_interval.py`，
   **不得凭会话印象估时**。宁可慢，不可抢。
 - 不确定提交（超时 / stdout 空 / 无收据）：**保留草稿与封面，只轮询同一精确标题，禁止重提**。
   日限额硬失败（`result:-14000`、`need_retry:false`）**不得同日重试或换稿绕过**。
 - AI 合成内容传 `--content-declaration "笔记含AI合成内容"`；要求「无需声明」时**省略该参数**。
 
-> 其余约束（Web Component 提交、406 回退、CDP 上限、积压草稿处置）见 `references/03-constraints.md`。
+> 其余约束（Web Component 提交、406 回退、CDP 上限、积压草稿处置）见 `references/03-constraints.md`
 
 ## 内容闸门速查（详见各 patch）
 
@@ -111,7 +111,7 @@ metadata:
 自动检索选题 → 过闸门（不合格进待发池**不写稿**）→ **按事件查重**
 （`publish-loop-guard/helpers/dup_check.py --title "..."`，rc=0 才继续）
 → 写稿预检做封面 → 写入 `inflight.json` 并起 `watch_missing.py`
-→ 按 8~12 分钟间隔逐篇发布（`verify-note` 通过才计间隔）
+→ 按 6~14 分钟间隔逐篇发布（`verify-note` 通过才计间隔）
 → 逐篇回报 `note_id`，结束清空 `inflight.json`。详见 `publish-loop-guard/SKILL.md`。
 
 ## 失败处理（要点）

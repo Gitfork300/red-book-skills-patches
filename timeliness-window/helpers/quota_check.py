@@ -38,9 +38,27 @@ from datetime import datetime
 HERE = os.path.dirname(os.path.abspath(__file__))
 PATCH_ROOT = os.path.normpath(os.path.join(HERE, ".."))
 PATCHES_ROOT = os.path.normpath(os.path.join(PATCH_ROOT, ".."))
-LOG_PATH = os.environ.get("XHS_INTERVAL_LOG") or os.path.join(
-    PATCHES_ROOT, "publish-interval-guard", "state", "publish_log.json"
-)
+def _log_path() -> str:
+    """发布台账路径：env 覆盖 > 工作区 `.state`（迁移期可回落树内旧址）。
+
+    权威在 `<patches>/tools/runtime_paths.py`；state 不进 skill 树（2026-11-06 用户裁定）。
+    """
+    override = os.environ.get("XHS_INTERVAL_LOG")
+    if override:
+        return override
+    try:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "_xhs_runtime_paths", os.path.join(PATCHES_ROOT, "tools", "runtime_paths.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.resolve_publish_log()
+    except Exception:
+        return os.path.join(PATCHES_ROOT, "publish-interval-guard", "state", "publish_log.json")
+
+
+LOG_PATH = _log_path()
 
 # 恶劣天气 / 台风影响 —— 合并为一个配额池（"预警"本身也是天气影响内容，不拆类计数）
 _WEATHER_SPEC = {

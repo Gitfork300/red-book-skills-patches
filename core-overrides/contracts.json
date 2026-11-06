@@ -55,8 +55,8 @@
         "share_link"
       ]
     },
-    "SKILL.md": {
-      "note": "整篇重写（上游骨架 + 我们的全部 patch 规则）。同步后 100% 冲突属预期，不要当异常处理。",
+    "INSTRUCTIONS.md": {
+      "note": "整篇重写（上游骨架 + 我们的全部 patch 规则）。同步后 100% 冲突属预期，不要当异常处理。（上游名为 SKILL.md；2026-10-30 起覆盖层源文件同步改名 INSTRUCTIONS.md 以退出技能注册。）",
       "we_add": [
         "Loaded patches",
         "references/01-publish-flow.md"

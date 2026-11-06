@@ -37,8 +37,13 @@ PATCH_ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__fil
 CORE = os.path.join(PATCH_ROOT, "core-overrides")
 OVERRIDES = os.path.join(CORE, "overrides")
 CONTRACTS = os.path.join(CORE, "contracts.json")
+# 与 apply_overrides.py 的默认本体保持一致：随 Patch 分发的 runtime/。
+# 注意本文件的 PATCH_ROOT 是**技能根**（tools/..），而 apply_overrides.py 的
+# PATCH_ROOT 是 core-overrides/，两边写相对路径时基准不同，别照抄。
+# 2026-10-09 修：这里原本写死 ../red-book-skills（一个不存在于本机的目录），
+# 一旦启用就会报「主 skill 目录不存在」并整条自检失败。
 LOCAL_SKILL = os.path.normpath(
-    os.environ.get("RED_BOOK_SKILLS_ROOT", os.path.join(PATCH_ROOT, "..", "red-book-skills"))
+    os.environ.get("RED_BOOK_SKILLS_ROOT", os.path.join(PATCH_ROOT, "runtime"))
 )
 APPLY = os.path.join(CORE, "helpers", "apply_overrides.py")
 
@@ -76,8 +81,10 @@ def check_applied():
     """覆盖层是否已应用到本体。"""
     if not os.path.exists(APPLY):
         return False, f"找不到 {APPLY}"
+    env = dict(os.environ, RED_BOOK_SKILLS_ROOT=LOCAL_SKILL)
     r = subprocess.run([sys.executable, APPLY, "verify"],
-                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+                       capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       env=env)
     return r.returncode == 0, (r.stdout or r.stderr or "").strip()
 
 

@@ -2,6 +2,7 @@
 name: xhs-risk-guard
 system: shared
 version: 1.3.0
+description: "小红书风控规则单一权威：读取限流、登录态、接口签名、假风控四域总表，附可执行守卫（预算、冷却、连续失败熔断）。触发词：限流、风控、captcha、登录失效、假风控。"
 patch_for: red-book-skills
 applies_to_main_version: ">=0.1.0"
 priority: 12
@@ -59,7 +60,7 @@ created: 2026-09-12
 
 | # | 规则 | 归属 |
 | --- | --- | --- |
-| E1 | 连续发布间隔 8~12 分钟随机（下限 8），计时起点 verify-note 通过后 | `publish-interval-guard` |
+| E1 | 连续发布间隔 6~14 分钟随机（下限 6），计时起点 verify-note 通过后 | `publish-interval-guard` |
 | E2 | 长队列每篇发布前探活 Chrome，别只在开头探一次 | `windows-sandbox-workaround` |
 | E3 | 标题 20 上限按字宽计（汉字/全角=1，英文数字半角每 2 计 1） | `safe-wording-guard` |
 | E4 | 正文一律不出现网址或裸域名 | `safe-wording-guard` |
@@ -112,4 +113,3 @@ $PY $P/helpers/risk_state.py reset --kind read-body    # 慎用：只清本地�
 | 场景 | 读哪个文件 |
 | --- | --- |
 | 建立背景（事故复盘）、E6/F 域详细判定、接入代码示例 | `refs/01-detail.md` |
-| 版本修改记录（v1.0.0 ~ v1.3.0） | `refs/02-changelog.md` |

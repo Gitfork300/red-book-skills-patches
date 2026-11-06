@@ -5,34 +5,41 @@
       "id": "workspace-memory",
       "root": "${WORKSPACE}/.workbuddy/memory",
       "main": "MEMORY.md",
-      "detail_dirs": ["topics"],
-      "limit_main": 2900,
-      "limit_main_lines": 90,
-      "limit_detail": 9000,
+      "detail_dirs": [
+        "topics"
+      ],
+  "limit_main": 5500,
+  "limit_main_lines": 90,
+      "limit_detail": 10000,
       "limit_detail_lines": 260,
       "anchors": [
-        "不要直接改本体",
+        "不要直接改 runtime",
         "D+7",
-        "8 分钟",
+        "6–14",
         "无人物",
         "字宽",
         "dup_check",
         "打星评级",
         "nmc.cn"
-      ]
+      ],
+      "optional": true,
+      "_anchor_note": "锚点随规则变更同步（2026-09-11）：本体→runtime；间隔 8 分钟→11–32 分钟（2026-10-20 上界由 32 收窄为 22）→8–18（10-22）→**6–14（2026-10-31，锚点同步改为 6–14）**。改 MEMORY.md 相关规则时必须同步这里的词。",
+  "_limit_note": "主入口是铁律速查表，条目随规则增长自然变长。遵循用户调上限优于删条目的约定，将工作区入口上限调整为 5500、详情上限调整为 10000；行数上限保持不变。"
     },
     {
       "id": "main-skill",
-      "root": "${PATCH_ROOT}/core-overrides/overrides",
-      "main": "SKILL.md",
-      "detail_dirs": ["references"],
+  "root": "${PATCH_ROOT}/core-overrides/overrides",
+  "main": "INSTRUCTIONS.md",
+      "detail_dirs": [
+        "references"
+      ],
       "limit_main": 6000,
       "limit_main_lines": 180,
       "limit_detail": 9000,
       "limit_detail_lines": 260,
       "anchors": [
         "不要直接改本体",
-        "8 分钟",
+        "6 分钟",
         "字宽",
         "无人物",
         "dup_check",
@@ -47,7 +54,9 @@
       "id": "comment-reply-guard",
       "root": "${PATCH_ROOT}/comment-reply-guard",
       "main": "SKILL.md",
-      "detail_dirs": ["refs"],
+      "detail_dirs": [
+        "refs"
+      ],
       "limit_main": 6000,
       "limit_main_lines": 180,
       "limit_detail": 9000,
@@ -66,7 +75,9 @@
       "id": "windows-sandbox-workaround",
       "root": "${PATCH_ROOT}/windows-sandbox-workaround",
       "main": "SKILL.md",
-      "detail_dirs": ["refs"],
+      "detail_dirs": [
+        "refs"
+      ],
       "limit_main": 6000,
       "limit_main_lines": 180,
       "limit_detail": 9000,
@@ -85,7 +96,9 @@
       "id": "publish-loop-guard",
       "root": "${PATCH_ROOT}/publish-loop-guard",
       "main": "SKILL.md",
-      "detail_dirs": ["refs"],
+      "detail_dirs": [
+        "refs"
+      ],
       "limit_main": 6000,
       "limit_main_lines": 180,
       "limit_detail": 9000,
@@ -104,7 +117,9 @@
       "id": "timeliness-window",
       "root": "${PATCH_ROOT}/timeliness-window",
       "main": "SKILL.md",
-      "detail_dirs": ["refs"],
+      "detail_dirs": [
+        "refs"
+      ],
       "limit_main": 6000,
       "limit_main_lines": 180,
       "limit_detail": 9000,
@@ -124,7 +139,9 @@
       "id": "publish-preflight-guard",
       "root": "${PATCH_ROOT}/publish-preflight-guard",
       "main": "SKILL.md",
-      "detail_dirs": ["refs"],
+      "detail_dirs": [
+        "refs"
+      ],
       "limit_main": 6000,
       "limit_main_lines": 180,
       "limit_detail": 9000,
@@ -137,7 +154,7 @@
         "net_probe",
         "check_organizer",
         "评级块",
-        "8~12 分钟",
+        "6~14 分钟",
         "batch_preflight"
       ]
     },
@@ -145,7 +162,9 @@
       "id": "writing-facts-only",
       "root": "${PATCH_ROOT}/writing-facts-only",
       "main": "SKILL.md",
-      "detail_dirs": ["refs"],
+      "detail_dirs": [
+        "refs"
+      ],
       "limit_main": 6000,
       "limit_main_lines": 180,
       "limit_detail": 9000,
@@ -164,7 +183,9 @@
       "id": "xhs-risk-guard",
       "root": "${PATCH_ROOT}/xhs-risk-guard",
       "main": "SKILL.md",
-      "detail_dirs": ["refs"],
+      "detail_dirs": [
+        "refs"
+      ],
       "limit_main": 6000,
       "limit_main_lines": 180,
       "limit_detail": 9000,
@@ -183,7 +204,9 @@
       "id": "safe-wording-guard",
       "root": "${PATCH_ROOT}/safe-wording-guard",
       "main": "SKILL.md",
-      "detail_dirs": ["refs"],
+      "detail_dirs": [
+        "refs"
+      ],
       "limit_main": 6000,
       "limit_main_lines": 180,
       "limit_detail": 9000,
@@ -202,7 +225,9 @@
       "id": "cover-image-rules",
       "root": "${PATCH_ROOT}/cover-image-rules",
       "main": "SKILL.md",
-      "detail_dirs": ["refs"],
+      "detail_dirs": [
+        "refs"
+      ],
       "limit_main": 6000,
       "limit_main_lines": 180,
       "limit_detail": 9000,
@@ -219,13 +244,15 @@
       "id": "publish-interval-guard",
       "root": "${PATCH_ROOT}/publish-interval-guard",
       "main": "SKILL.md",
-      "detail_dirs": ["refs"],
+      "detail_dirs": [
+        "refs"
+      ],
       "limit_main": 6000,
       "limit_main_lines": 180,
       "limit_detail": 9000,
       "limit_detail_lines": 260,
       "anchors": [
-        "480–720",
+        "360–840",
         "reserve",
         "verify-note",
         "found:true",

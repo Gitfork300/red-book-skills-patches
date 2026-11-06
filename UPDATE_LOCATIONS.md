@@ -11,6 +11,7 @@
 | 随仓库分发的运行代码 | `<repo-root>/runtime/` |
 | 本地 Python 虚拟环境 | `<repo-root>/.venv/` |
 | apply 前备份 | `<workspace>/_skill-backup/core-overrides-preapply/` |
+| 业务工作区（运营内容） | `C:\xhs`（2026-11-02 起；含 `.workbuddy/memory` + `xhs_publish/`） |
 
 ## 更新运行代码
 
@@ -28,3 +29,8 @@ A2 与当前 Windows 兼容脚本布局不同。不得对 A2 快照运行旧布�
 `runtime/config/accounts.json`、`runtime/tmp/`、各 patch `state/`、Chrome 登录态、
 稿件及日志均为本机数据。它们不属于公开仓库内容。安装脚本不会创建账号、Cookie、
 浏览器 Profile 或业务状态。
+
+## 业务内容与规范内容边界（补充）
+
+- Skill 内的 `topics/` 与各 patch 规则是**强制规范**（含分组概述与分组规范数据），属于版本内容。
+- `C:/xhs` 下每日生成的待分发结果、发布进度、运行日志与中间文件是**业务内容**，不回写 skill。
