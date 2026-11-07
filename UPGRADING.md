@@ -10,6 +10,9 @@
 - Python 直接依赖为 `requests`、`websockets`、`opencv-python` 和 `Pillow`，通过 `tools/setup_runtime.py` 安装到仓库
   `.venv/`。已安装环境在日常升级时保持不变；维护方可更新首次安装方案，但须评估既有环境兼容性。
   详见 `RUNTIME_SETUP.md`。Chrome/Chromium 由本机提供。
+- `.venv/` 被 Git 忽略，因此不随提交上传到 GitHub；推送不会删除部署机器上的环境。
+  更新部署时保留原安装目录，只更新受跟踪内容；整目录删除/重建、全量同步前清空目标等方式禁止使用，
+  除非同步工具明确排除 `.venv/` 并已验证不会触碰它。
 - 账号配置、登录态、Chrome Profile、稿件和运行状态均为本机数据，不进入仓库或跨设备复制。
 
 ## A2 与本地架构

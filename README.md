@@ -37,7 +37,8 @@ py -3 tools\setup_runtime.py
 .\.venv\Scripts\python.exe tools\check_env.py --fix-hint
 ```
 
-**当前 1.3.6 本地更新尚未推送**，上面的 clone 在发布之前仍取得远端旧版。新机器完整步骤、
+GitHub 仓库只发布源码和规则，不包含 `.venv/`。更新已有安装时应原位更新受跟踪文件，
+保留原目录中的 `.venv/`；不要先删除安装目录再重新 clone。新机器完整步骤、
 已有数据保护及 `doctor` 的清理/覆盖影响见 [`INSTALL.md`](./INSTALL.md)；审查影响并通过门禁后，
 按仓库根目录 [`SKILL.md`](./SKILL.md) 加载和使用本 Skill。版本与更新内容见 [`CHANGELOG.md`](./CHANGELOG.md)。
 发布脚本的相对路径以 `runtime/` 为当前目录，例如：

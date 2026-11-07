@@ -5,9 +5,7 @@ A2 Fork 不参与日常运行；发现上游更新后须评估并移植适用的
 
 ## 安装
 
-需要 Git、Python 3.10+（含 pip）及 Chrome/Chromium。安装包须为包含目标版本的完整 Git 仓库；
-当前本地 1.3.6 **尚未提交或推送**，直接从 GitHub clone 目前不会得到该版本。
-在 PowerShell 中进入已获取的目标版本目录，或在维护者发布后 clone：
+需要 Git、Python 3.10+（含 pip）及 Chrome/Chromium。首次安装可从 GitHub 获取完整仓库：
 
 ```powershell
 git clone https://github.com/Gitfork300/red-book-skills-patches.git red-book-skills-patches
@@ -21,6 +19,9 @@ setup 需要 Python 3.10+，安装 `requirements.txt` 中的 `requests`、`webso
 发布时另需本机安装 Chrome/Chromium。不要将登录态、账号配置或浏览器 Profile 放进 Git。
 setup 仅用于首次创建；已存在 `.venv` 时会拒绝修改。日常升级保留现有环境，维护方更新环境方案与
 必要时的安全迁移见 [`RUNTIME_SETUP.md`](./RUNTIME_SETUP.md#虚拟环境的来源与维护)。
+**更新已有安装时不得删除或整目录替换安装目录**：应在原路径更新 Git 跟踪文件，或使用明确排除
+`.venv/` 的文件同步方式。推送到 GitHub 只更新仓库跟踪内容，不会上传或删除部署机器上的 `.venv/`；
+若部署工具会先清空目标目录，先停止并修改其行为，不能继续安装。
 
 对于**全新**业务工作区，建立规则入口及空稿件目录（默认 `C:\xhs`）：
 

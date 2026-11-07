@@ -7,7 +7,7 @@ metadata:
   trigger: 小红书发布、登录、检索、评论、互动
   source: bundled-runtime
 system: shared
-version: 1.3.6
+version: 1.3.7
 ---
 
 # red-book-skills-patch
@@ -29,6 +29,8 @@ py -3 tools\setup_runtime.py
 
 先审查覆盖层 dry-run 和现存修改，再运行 `.\.venv\Scripts\python.exe tools\doctor.py`；
 新机器完整流程见 [`INSTALL.md`](./INSTALL.md)。
+更新已安装副本时须保留原安装目录和其中的 `.venv`；不要删除或整目录替换，详见
+[`RUNTIME_SETUP.md`](./RUNTIME_SETUP.md#虚拟环境的来源与维护)。
 `doctor.py` 先自愈再校验，一次串完环境自检、覆盖层、契约、版本登记、文档分层、
 回归测试与发布安全门禁（退出码 0 全通过 / 1 仅警告 / 2 阻断）。任一步失败都必须
 停止并修复；不要跳过门禁直接发布。日常只需跑 `ensure_compatible.py`（不带
