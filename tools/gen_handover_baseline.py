@@ -102,15 +102,20 @@ def topic_sizes() -> dict[str, int]:
 
 
 def naked_ports() -> list[str]:
-    """脱敏版知识库里不应出现真实端口字面量。"""
+    """分发文档中不应出现运行端口字面量。"""
     hits = []
-    for name in sorted(os.listdir(TOPICS)):
-        if not name.endswith(".md"):
-            continue
-        text = open(os.path.join(TOPICS, name), encoding="utf-8").read()
-        for port in ("9333", "9222"):
-            if port in text:
-                hits.append(f"{name}:{port}")
+    for dirpath, dirnames, filenames in os.walk(ROOT):
+        dirnames[:] = sorted(d for d in dirnames if d not in (".git", ".venv", "__pycache__"))
+        for name in sorted(filenames):
+            if not name.endswith(".md"):
+                continue
+            path = os.path.join(dirpath, name)
+            rel = os.path.relpath(path, ROOT).replace("\\", "/")
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            for port in ("9333", "9222"):
+                if port in text:
+                    hits.append(f"{rel}:{port}")
     return hits
 
 
@@ -146,7 +151,7 @@ def render() -> str:
     add("- `core-overrides/META.json`：`files` = %d、`overrides.targets` = %d\n" % (files, targets))
     add("- `topics/`：正文篇数 = %d（含 `QUICKREF.md`）\n" % len(sizes))
     add("- `HANDOVER.md` 三锚点：`全量替换包`、`本地定制清单`、`升级记录表`\n")
-    add("- 敏感值：`topics/` 内不得出现真实端口字面量 9333 / 9222（须为 `<PORT_PUBLISH>` / `<PORT_COMMENT>`）\n")
+    add("- 敏感值：所有 Markdown 分发文档不得出现真实端口字面量；使用 `<PORT_PUBLISH>` / `<PORT_COMMENT>` 占位\n")
     return "".join(lines)
 
 

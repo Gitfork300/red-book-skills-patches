@@ -99,10 +99,10 @@
   与铁律 7 的评论时间窗口不冲突（先用 19 定候选笔记，再在候选内处理）。
 - 20：列表接口单次只出 100 条，新抓快照最旧只到 9/14 18:48，而评论最多的那篇正好在 100 条之外
   → 必须合并历史快照去重（本次 100+197 → 253 条）。
-- 25：自建 websocket 连 9333 会被本机 ALL_PROXY 劫持，**永久挂起且无任何报错**；
+- 25：自建 websocket 连 <PORT_PUBLISH> 会被本机 ALL_PROXY 劫持，**永久挂起且无任何报错**；
   `_send()` 只接位置参数 `_send(方法名, 参数字典)`，传 kwargs 会 TypeError。
-  浏览器疑似已挂 → 先查 `http://127.0.0.1:9333/json/version`，挂了跑
-  `chrome_launcher.py --port 9333 --restart`（skill 的 .venv python）。
+  浏览器疑似已挂 → 先查 `http://127.0.0.1:<PORT_PUBLISH>/json/version`，挂了跑
+  `chrome_launcher.py --port <PORT_PUBLISH> --restart`（skill 的 .venv python）。
 - 30：本机 PowerShell 工具会被沙箱拦（`sandbox-center cmd decisionRecord missing`），Bash 的
   `ls` / `wmic` 也常失效 → 可靠写法是 Python `subprocess` 调 `powershell -Command`，
   **输出写文件后用 Read 读**。

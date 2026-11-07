@@ -65,14 +65,15 @@ $env:XHS_WORKSPACE = "D:\your-workspace"
 
 ### Q：端口占位符 `<PORT_PUBLISH>` / `<PORT_COMMENT>` 是什么？
 
-规则文档里出现的 `<PORT_PUBLISH>`（发布实例）和 `<PORT_COMMENT>`（评论实例）是**脱敏占位符**，不是真实端口。真实默认值：
+它们是公开规则文档中的**脱敏占位符**，不是可直接输入命令的字面量。使用命令时，将占位符替换为本机对应 Chrome/CDP 实例实际监听的端口；不要把本机端口写回 Skill 文档或提交到仓库。
 
-| 占位符 | 默认值 | 环境变量覆盖 |
+| 占位符 | 对应实例 | 自检变量 |
 | --- | --- | --- |
-| `<PORT_PUBLISH>` | 9333 | `XHS_CDP_PORT_PUBLISH` |
-| `<PORT_COMMENT>` | 9222 | `XHS_CDP_PORT_COMMENT` |
+| `<PORT_PUBLISH>` | 发布实例 | `XHS_CDP_PORT_PUBLISH` |
+| `<PORT_COMMENT>` | 评论实例 | `XHS_CDP_PORT_COMMENT` |
 
-复刻到新机器时，如果实例端口不同，设对应环境变量即可，无需改文档。
+这两个环境变量供 `check_env.py` 显示本机期望值；它们**不会自动改写所有运行脚本或 Chrome 启动配置**。
+运行时仍以实际启动的浏览器端口和对应命令的 `--port` 参数为准。若使用非默认端口，先在本机 Chrome 启动配置中设置，再将该值传给支持 `--port` 的命令并运行环境自检；不要仅设置自检变量后就假定已完成重配置。
 
 ### Q：换机器 / 换位置后怎么保证行为一致？
 

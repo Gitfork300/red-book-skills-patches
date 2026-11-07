@@ -33,7 +33,7 @@ created: 2026-09-11
 | 8 | 流程全程挂 30 分钟漏发复核 | 本 patch |
 | 9 | 逐篇回报 `note_id`，结束报总表 | — |
 
-**启动时必须做两件事**（否则复核误判）：
+**启动必做**（否则复核误判）：
 1. 把本次队列所有 key 写入 `state/inflight.json`
 2. 起后台看门狗 `helpers/watch_missing.py`
 
@@ -62,7 +62,7 @@ created: 2026-09-11
 
 ### 🚨 查重必须双源
 
-只读一个必漏（两者覆盖面不同）；`dup_check.py` 已双源合并且平台条目 `always=True` 绕时间窗。
+单源会漏（两者覆盖面不同）；`dup_check.py` 已双源合并且平台条目 `always=True` 绕时间窗。
 **任何批量发布链，预检必须逐条跑 dup_check；缺失即为高危。** 细节见 `refs/01-detail.md`。
 
 ### 补发 / 续跑的三条铁律
@@ -84,7 +84,7 @@ created: 2026-09-11
 | ① 分组进度表 | 每组「已建仓/已发布/待发」+ 明细（key+状态） | jobs 文件 + `_NNNN_pub_progress.json` published 计数 |
 | ② 预计推进表 | 「时段 × 预计进度 × 组」+ 收官 ETA 与数学账 | guard 末条 next_gap；间隔 IMIN/IMAX |
 | ③ 小任务进度 | 天气/评论巡检/提醒/Canary/重发项/bug 债/收口 | memory 当日日志 + automation 列表 |
-| ④ 阻塞与风险 | 卡点（事故/pending/Chrome/平台侧）+ 拍板项 ≤3 条 | 实时诊断：pending、9333 LISTENING、creator 可达性 |
+| ④ 阻塞与风险 | 卡点（事故/pending/Chrome/平台侧）+ 拍板项 ≤3 条 | 实时诊断：pending、<PORT_PUBLISH> LISTENING、creator 可达性 |
 
 硬性要求（**列结构与标记符号照抄 `refs/03-progress-report.md` 样板**）：
 ① 篇数以 progress 文件 published 为准，**禁 `publish_log.json` 推算**（B-048 同族）；
@@ -95,8 +95,7 @@ created: 2026-09-11
 
 ## 三、30 分钟漏发复核
 
-批量发布是 1~2 小时长流程，中途可能超时被杀 / 间隔守卫放弃 / verify 不过 / 双队列抢通道。
-把判定交给脚本，每 30 分钟无脑跑一次：
+批量发布通常持续 1~2 小时，期间可能中断或超时。交由脚本每 30 分钟检查：
 
 | 步 | 动作 |
 | --- | --- |
@@ -129,7 +128,7 @@ PY=<red-book-skills>/.venv/Scripts/python.exe
 P=~/.workbuddy/skills/red-book-skills-patches/publish-loop-guard
 $PY $P/helpers/check_missing.py                 # 一次性复核（默认 2 天）
 $PY $P/helpers/check_missing.py --keys k1,k2    # 队列场景只查本批
-$PY $P/helpers/check_missing.py --verify        # 平台确认（要 Chrome+9222）
+$PY $P/helpers/check_missing.py --verify        # 平台确认（要 Chrome+<PORT_COMMENT>）
 $PY $P/helpers/watch_missing.py --interval 1800 --max-hours 6
 $PY $P/helpers/recent_published.py --days 2     # 平台侧轻量速查（只读第一页）
 $PY $P/helpers/list_all_notes.py --wording      # 合规审计全量清单
@@ -151,12 +150,12 @@ $PY $P/helpers/read_note_body.py --snapshot <json> --since 2026-09-10 --wording
 
 - `inflight.json` 忘清空 → 漏发永远查不出；队列结束先清空再复核。
 - 废弃稿留在稿件目录 → 每轮误报；写进 `abandoned.json`。
-- `--verify` 有成本（每篇几十秒、占 9222），先默认模式筛再对少量候选 verify。
+- `--verify` 有成本（每篇几十秒、占 <PORT_COMMENT>），先默认模式筛再对少量候选 verify。
 - 不为"查全"翻页（第 2 页以后既慢又无结论）。
 - 配额与复核按**本地时间**自然日 / mtime 算。
 - 风控以 `xhs-risk-guard` 为准；`check-login` 命中登录缓存（TTL 12h）会撒谎，先删缓存再验。
 - **发布链重试前必须 verify**：输出无 `PUBLISH_STATUS` ≠ 没发出（超时会造成假失败→重发第二条）。
-- **页签全局 ≥10 自动回收至 ≤9**（B-057 根治，9222+9333 合计口径，内建于 `cdp_publish`）；收口用 `core-overrides/helpers/tab_guard.py`（默认双实例）。
+- **页签全局 ≥10 自动回收至 ≤9**（B-057 根治，<PORT_COMMENT>+<PORT_PUBLISH> 合计口径，内建于 `cdp_publish`）；收口用 `core-overrides/helpers/tab_guard.py`（默认双实例）。
 
 ## 展开阅读（命中场景才读）
 

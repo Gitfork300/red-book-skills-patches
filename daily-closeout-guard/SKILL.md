@@ -53,7 +53,7 @@ created: 2026-10-15
 | 步 | 动作 | 判据 / 出处 | 预算 |
 | --- | --- | --- | --- |
 | 1 | **核进度**：以权威 `_NNNN_pub_progress.json` 逐条看 `status`，断言 `published 数 == jobs 行数 - 标记行` | `__chain__ circuit_break` 是熔断**标记不算篇数**；禁用 `publish_log.json` 数条目（100 条环形缓冲） | 5 min |
-| 2 | **清进程/端口/残留 tab**：停当日 `_chain_*` / `_watchdog_*`，无 9333/9222 监听、无 Chrome 残留；**跑 `core-overrides/helpers/tab_guard.py --apply` 回收泄漏 tab**（B-057；2026-10-25 起为双实例全局口径：9222+9333 合计 ≥10 回收至 ≤9，9333 留最新 3/9222 留最新 1，login 受保护） | **停链与移锁成对做**，否则 `chain_alive()` 因 `.hb` 尚新判「活」→ 最长 45 分钟不重拉（B-050）；只执行一次，禁宽匹配误杀重拉（B-051）。链中已由 `cdp_publish` 自动守卫，本步只是收口补清（旧脚本 `_clean_creator_tabs.py` 按前缀清空、必须停链后跑，已废弃） | 4 min |
+| 2 | **清进程/端口/残留 tab**：停当日 `_chain_*` / `_watchdog_*`，无 <PORT_PUBLISH>/<PORT_COMMENT> 监听、无 Chrome 残留；**跑 `core-overrides/helpers/tab_guard.py --apply` 回收泄漏 tab**（B-057；2026-10-25 起为双实例全局口径：<PORT_COMMENT>+<PORT_PUBLISH> 合计 ≥10 回收至 ≤9，<PORT_PUBLISH> 留最新 3/<PORT_COMMENT> 留最新 1，login 受保护） | **停链与移锁成对做**，否则 `chain_alive()` 因 `.hb` 尚新判「活」→ 最长 45 分钟不重拉（B-050）；只执行一次，禁宽匹配误杀重拉（B-051）。链中已由 `cdp_publish` 自动守卫，本步只是收口补清（旧脚本 `_clean_creator_tabs.py` 按前缀清空、必须停链后跑，已废弃） | 4 min |
 | 3 | **清自动化**：当日创建的**一次性接力档全删**；长期 recurring（如每日 08:00 天气）保留 | 删前核对元数据是否已被改档；与用户在线操作并发时让位 | 3 min |
 | 4 | **归档锁**：陈旧 `.lock` / `.hb` **外移** `xhs_publish/_archived/locks_YYYYMMDD/`（只归位不删）；当日 `.hb` 留到次日作证据 | 铁律 9：整理只归位+去重+外移，不删 | 3 min |
 | 5 | **改文档**：`_publish_status_NNNN.md` 更新时间写最终落盘时间，**阻塞项段落须与当晚实际一致**；另出 `_REVIEW_NNNN.md` + `_NEXT_NNNN.md` 交接卡 | 10-13 曾出现傍晚阻塞描述与夜间已解决事实矛盾 | 6 min |

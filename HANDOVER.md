@@ -1,6 +1,6 @@
 # 交接卡 · 版本升级专用
 
-> 生成：2026-11-06 11:20｜当前复核：2026-11-07（root 1.3.7）｜对象：本 skill 全树（14 个 patch + root 门面）
+> 生成：2026-11-06 11:20｜当前复核：2026-11-07（root 1.3.8）｜对象：本 skill 全树（14 个 patch + root 门面）
 > 用途：把本 skill 交接给下一个 agent 做**大版本升级**。**本卡是两端唯一桥梁**，读完本页再动任何文件。
 > 本 skill 的定位（用户 11-06 明确）：**包含全部核心内容**——既能单独部署到新机器直接跑，也是本次升级的基线物。
 > 因此「卡里写的」必须等于「树里有的」；记录与实物不符时，以实物为准并当天改卡，不许留悬空描述。
@@ -16,9 +16,8 @@
 - 现有发布台账及登录数据未覆盖；新旧台账均存在，迁移前须停止发布进程并核实，绝不覆盖已有目标。
 - 2026-11-06 用户手动运行完整 `doctor`，提供的输出显示 10 个步骤均为 OK；随后复核 9 个覆盖文件与交接基线一致。以下旧体检结果仅为 demo 交接时的历史记录。
 - 1.3.4 修正了过期评级块及虚拟环境说明；用户于 18:56 审查 dry-run 并备份应用两个受管文件，verify 显示 9 个文件一致。备份位于 `C:/xhs/_skill-backup/core-overrides-preapply/20261106_185625`。
-- 本机 Python 3.13.9 安装于 `D:/VS-SKILL/python-3.13.9`；原有不可启动的 `.venv` 保留在 `D:/VS-SKILL/red-book-skills-patches-venv-backup-20261106`，仓库 `.venv` 已重建。
-- 本机便携 Git 位于 `D:/VS-SKILL/git-portable-2.56.0/cmd`，未修改系统 PATH。需要 Git 的检查可先在当前 PowerShell 会话设置 `$env:PATH = 'D:\VS-SKILL\git-portable-2.56.0\cmd;' + $env:PATH`。
-- root 1.3.6 已提交并推送至 GitHub `main`（commit `00b2762`）；本次 root 1.3.7 修订明确部署更新时须保留原路径 `.venv`，不改动业务环境。
+- 本机 Python、Git 安装路径及 `.venv` 备份路径均为维护机配置，不作为其他安装环境要求；安装和迁移请使用本机已安装的 Python/Git，并按 [`RUNTIME_SETUP.md`](./RUNTIME_SETUP.md) 处理现有环境。
+- root 1.3.7 已推送至 GitHub `main`（commit `ef14f26`）；本次 root 1.3.8 修订补充公开文档脱敏和占位符安装说明。
 - 1.3.5 从工作区分组规范提炼 `topics/14-group-rules.md` 并补全速查卡；每日待分发结果仍属于业务工作区。工作区运营脚本未随此文档迁移。
 - 1.3.6 修正过期分组任务树、`publish_log.json` 进度来源和每日结果存放口径；15 份 Patch 历史原文移至 `history/patches/`，Skill 内保留事故三列表与历史指针。
 - 本次远端核查：patches `main` 仍为 `7ef76318bd7cb3265b9322faf95e71928ff0cf38`，A2 `main` 仍为 `b043748282a57e347c52f517dfb59819121134ab`，未发现新的 core 参考提交。后续发现变更按 `UPGRADING.md` 评估并移植适用改动。
@@ -97,11 +96,11 @@
 | 1 | 无外部依赖，不读同级 `red-book-skills`、运行时不联网 GitHub | ✅ `SKILL.md` 已声明 |
 | 2 | 依赖可重建：`requirements.txt` + `tools/setup_runtime.py` + `tools/init_runtime.py` | ✅ 三件齐全（`.venv` 197 MB **不入包**，新机重建） |
 | 3 | 脚本无硬编码绝对路径 | ✅ 已扫，路径走 `XHS_WORKSPACE` 等环境变量 + 缺省回落 |
-| 4 | 敏感值脱敏、且**脱敏规则有文档**：端口写 `<PORT_PUBLISH>` / `<PORT_COMMENT>` | ✅ 见 `HELP.md` Q&A：发布实例＝**9333**、评论实例＝**9222**（新机照此复刻即可还原） |
+| 4 | 敏感值脱敏、且**脱敏规则有文档**：端口写 `<PORT_PUBLISH>` / `<PORT_COMMENT>` | ✅ 见 `HELP.md` Q&A：发布实例＝**<PORT_PUBLISH>**、评论实例＝**<PORT_COMMENT>**（新机照此复刻即可还原） |
 | 5 | 规则正文随 Skill 分发 | `topics/` 15 篇 + `QUICKREF.md`；业务执行器须单独确认可用 |
 | 6 | 本机账号和登录态不随包 | ✅ 仓库不携带 `runtime/config/accounts.json`；由本机账号管理器生成或配置 |
 
-⚠️ **第 4 条是本次最重要的一条发现**：`topics/` 与工作区副本的差异，**大部分是脱敏造成的假差异**（`9333→<PORT_PUBLISH>`、`9222→<PORT_COMMENT>`）。
+⚠️ **第 4 条是本次最重要的一条发现**：`topics/` 与工作区副本的差异，**大部分是脱敏造成的假差异**（`<PORT_PUBLISH>→<PORT_PUBLISH>`、`<PORT_COMMENT>→<PORT_COMMENT>`）。
 此前把 8 个差异文件一律当「漂移」，会得出「裸拷贝工作区覆盖 skill」的错误结论——那会把真实端口写回公开包，且破坏分发口径。
 **正确的同步方式＝带上脱敏替换再回灌**，本次已按此执行。
 
@@ -164,7 +163,7 @@ runtime/tmp 1 个文件 → 已搬到 .state/tmp（取了较新副本，sha256 4
 ### 遗留与坑（接手必看）
 
 1. **升级前已启动的进程仍写旧址**：`sys.pycache_prefix` 与 `XHS_RUNTIME_TMP` 由 venv 的 `sitecustomize` 在**进程启动时**注入，
-   12:12 之前起的进程（`_keep9333` 等）内存里还是旧路径，会继续往 `runtime/tmp` 写。**重启后自然归位**，不需要改代码。
+   12:12 之前启动的保活进程内存里还是旧路径，会继续往 `runtime/tmp` 写。**重启后自然归位**，不需要改代码。
 2. **工作区旧脚本硬编码了旧址**（不在本次范围，但升级后若复用需改）：`weather/_audit_interval_0917.py`、
    `weather/_logtail_0917.py`（还写着已失效的旧用户名路径）、`xhs_publish/publish/_publish_chain_{P0916,round4,round5}.py`。
    现行链脚本走 `dup_check.py` 子进程，**不受影响**。
@@ -227,7 +226,7 @@ runtime/tmp 1 个文件 → 已搬到 .state/tmp（取了较新副本，sha256 4
 
 | 类型 | 文件 | 结论 |
 | --- | --- | --- |
-| **假差异**（仅端口脱敏） | 06、07、09、10、12 共 5 篇 | skill 是**脱敏版**（`9333→<PORT_PUBLISH>`、`9222→<PORT_COMMENT>`），内容与工作区完全一致，**不是漂移、不用动** |
+| **假差异**（仅端口脱敏） | 06、07、09、10、12 共 5 篇 | skill 是**脱敏版**（`<PORT_PUBLISH>→<PORT_PUBLISH>`、`<PORT_COMMENT>→<PORT_COMMENT>`），内容与工作区完全一致，**不是漂移、不用动** |
 | **真差异**（新规则未入 skill） | 03（+12 行）、08（+15 行）、11（+18 行） | 均为 11-04 / 11-06 用户新裁定：**Z 纪律**、**源闸门配额 v1.3**、**天气兜底 B-130「只能正推不能反否」**、`_quota_source_gate.py` 入链路 |
 
 **历史处置**：把 03/08/11 三篇按脱敏规则回灌进 `topics/`（原文件备份在
@@ -263,7 +262,7 @@ runtime/tmp 1 个文件 → 已搬到 .state/tmp（取了较新副本，sha256 4
 
 | 编号 | 状态 | 一句话 |
 | --- | --- | --- |
-| B-046 | 未修 | 9222（评论 profile）登录态无自动恢复路径 |
+| B-046 | 未修 | <PORT_COMMENT>（评论 profile）登录态无自动恢复路径 |
 | B-105 / B-117 | 已遏制未根治 | 后台链随会话被整体回收 → 起链必须「常驻托管器（while True）+ 后台任务」，禁用一次性 boot 脚本 |
 | B-111 | 已遏制 | 发布树双进程嵌套，同一篇被两个 `publish_one` 并发 |
 | B-112 | 未修 | 文档分层锚点词表过期 → 假红/假绿（与 P0-2 同源） |
@@ -276,7 +275,7 @@ runtime/tmp 1 个文件 → 已搬到 .state/tmp（取了较新副本，sha256 4
 
 | patch | ver | pri | patch | ver | pri |
 | --- | --- | --- | --- | --- | --- |
-| root `SKILL.md` | 1.3.7 | — | `publish-interval-guard` | 1.6.1 | 20 |
+| root `SKILL.md` | 1.3.8 | — | `publish-interval-guard` | 1.6.1 | 20 |
 | `core-overrides` | 1.5.4 | 2 | `timeliness-window` | 1.9.1 | 22 |
 | `update-checker` | 1.5.0 | 5 | `organizer-qualification-guard` | 1.3.0 | 23 |
 | `windows-sandbox-workaround` | 1.7.0 | 10 | `publish-preflight-guard` | 1.20.0 | 25 |
@@ -376,5 +375,6 @@ root `SKILL.md` 无 `META.json`、不在 `check_patch_versions` 覆盖范围内�
 | 2026-11-06 | root 1.3.4、core-overrides 1.5.4、cover-image-rules 1.8.2 | 统一现行规则，保护使用方已安装环境，补充维护方环境方案；用户备份并应用受管说明 | 45 项 unittest、文档分层、版本、公开发布、pip check、交接基线及 9 文件 verify 通过；本次未重跑完整 doctor | Copilot / 用户 |
 | 2026-11-06 | root 1.3.5 | 补充分组强制规范及速查卡，修正索引和锁语义，重新生成交接基线 | 47 项 unittest、文档分层、版本、公开发布、pip check、交接基线、9 文件 verify 与 33 项契约检查通过；未迁移业务脚本或改变现有台账 | Copilot |
 | 2026-11-06 | root 1.3.6、cover-image-rules 1.8.3 | 修正分组任务树和台账用途冲突；二维码白名单迁入工作区状态；源码与业务状态分开备份；历史 changelog/incidents 外移并保留三列速查；确认 A2 无新提交 | 52 项 unittest、版本、文档分层、发布安全、交接基线通过；源码快照（227 文件）及业务台账快照经 SHA-256 校验；Local Agent Host 每日 10:00 已配置；更新器直连网络错误，GitHub commit API 核实 A2 仍为基线 | Copilot |
+| 2026-11-07 | root 1.3.8 | 脱敏公开文档中的本机端口、路径和自动化标识；补充占位符与变量安装说明，强化发布门禁 | 更新文档扫描及交接基线校验；无运行行为变更 | Copilot |
 | 2026-11-07 | root 1.3.7 | 澄清 GitHub 不上传 `.venv/`，但部署更新不得删除已有环境；移除 1.3.6 未推送的过期提示；仅文档口径变更 | 更新安装、运行维护和升级文档；无运行行为变更 | Copilot |
 | | | | | |

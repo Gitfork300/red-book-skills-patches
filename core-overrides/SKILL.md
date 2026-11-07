@@ -2,7 +2,7 @@
 name: core-overrides
 system: shared
 version: 1.5.4
-description: "bundled runtime 的权威覆盖层：apply/verify/status 三态管理，页签全局守卫（9222+9333 合计≥10 回收至≤9）。改 runtime 必须走本 patch。触发词：apply 覆盖、DRIFTED、页签清理、tab 堆积。"
+description: "bundled runtime 的权威覆盖层：apply/verify/status 三态管理，页签全局守卫（<PORT_COMMENT>+<PORT_PUBLISH> 合计≥10 回收至≤9）。改 runtime 必须走本 patch。触发词：apply 覆盖、DRIFTED、页签清理、tab 堆积。"
 patch_for: red-book-skills
 applies_to_main_version: ">=0.1.0"
 priority: 2
@@ -47,8 +47,8 @@ created: 2026-09-12
 | runtime 文件 | 我们的改动 | 不应用会怎样 |
 | --- | --- | --- |
 | `INSTRUCTIONS.md`（上游 `SKILL.md`） | 合并各 patch 规则（封面规范/写作规范/间隔/时效地域/用词/预检） | 所有 patch 规则失效 |
-| `scripts/cdp_publish.py` | 发布按钮三级激活重试（组件事件 → 真实鼠标 → 键盘 Enter）；**页签守卫**：9222+9333 全局 page tab ≥10 自动回收最旧残留（发布实例留最新 3/评论实例留最新 1） | 按钮监听被换后静默失败，笔记不提交；tab 无界堆积吃内存并助推 Chrome 崩溃（B-056/B-057） |
-| `scripts/chrome_launcher.py` | Windows 下用 `CREATE_BREAKAWAY_FROM_JOB` 等让 Chrome 脱离 job object | 启动器退出后 9222 端口约 5 秒内死掉 |
+| `scripts/cdp_publish.py` | 发布按钮三级激活重试（组件事件 → 真实鼠标 → 键盘 Enter）；**页签守卫**：<PORT_COMMENT>+<PORT_PUBLISH> 全局 page tab ≥10 自动回收最旧残留（发布实例留最新 3/评论实例留最新 1） | 按钮监听被换后静默失败，笔记不提交；tab 无界堆积吃内存并助推 Chrome 崩溃（B-056/B-057） |
+| `scripts/chrome_launcher.py` | Windows 下用 `CREATE_BREAKAWAY_FROM_JOB` 等让 Chrome 脱离 job object | 启动器退出后 <PORT_COMMENT> 端口约 5 秒内死掉 |
 | `scripts/publish_pipeline.py` | 接入 `publish-interval-guard`，发布成功后写间隔记录 | 间隔守卫查不到上次记录，误判可立即发布 |
 
 ## 目录结构
@@ -118,13 +118,13 @@ python <patch>/core-overrides/helpers/apply_overrides.py diff scripts/chrome_lau
 一天堆 30+ 个 page tab（吃 ~2GB 内存）并助推 Chrome 崩溃（B-056）。已在覆盖层内建自动回收。
 
 **用户铁律（2026-10-25）：「任何阶段的浏览器页签都不要超过 10，避免卡顿」**——
-9222 评论实例 + 9333 发布实例**合计** ≤ 10（旧版只卡单实例 10，合计仍可到 20）。
+<PORT_COMMENT> 评论实例 + <PORT_PUBLISH> 发布实例**合计** ≤ 10（旧版只卡单实例 10，合计仍可到 20）。
 
 | 项 | 值 |
 | --- | --- |
 | 触发 | 全局合计 page tab **≥ 10**（新建 tab 前） |
 | 动作 | 回收至全局 **≤ 9**（给即将新建的 tab 留 1 个余量），保证新建后仍 ≤ 10 |
-| 保留 | 9333 保留**最新 3** 个（发布/verify 在用的 tab 永远最新，旧的均为残留）；9222 保留**最新 1** 个（notification 着陆页） |
+| 保留 | <PORT_PUBLISH> 保留**最新 3** 个（发布/verify 在用的 tab 永远最新，旧的均为残留）；<PORT_COMMENT> 保留**最新 1** 个（notification 着陆页） |
 | 保护 | `creator.xiaohongshu.com/login`（可能正用于人工扫码）——**不关闭**；每实例至少留 1 个 page（关掉最后一个 tab 会导致 Chrome 整体退出） |
 | 顺序 | `/json/list` 返回顺序 = 创建顺序（最早在前），只回收保留数之后的旧页，全局最旧优先 |
 | 时机 | `_find_or_create_tab` 取完快照、尚未建立 WebSocket 时 → 不会关掉本轮正在连的页 |
@@ -135,7 +135,7 @@ python <patch>/core-overrides/helpers/apply_overrides.py diff scripts/chrome_lau
 ```bash
 python <patch>/core-overrides/helpers/tab_guard.py                      # 只读报告（双实例全局）
 python <patch>/core-overrides/helpers/tab_guard.py --apply              # 执行全局清理
-python <patch>/core-overrides/helpers/tab_guard.py --port 9222          # 只管评论实例（单实例模式）
+python <patch>/core-overrides/helpers/tab_guard.py --port <PORT_COMMENT>          # 只管评论实例（单实例模式）
 ```
 
 评论链路另有一份同策略的项目层脚本：`xhs_publish/comment/_tab_guard.py`（`--clean` 执行清理）。
@@ -164,7 +164,7 @@ python <patch>/core-overrides/helpers/tab_guard.py --port 9222          # 只管
 - v1.5.4 (2026-11-06)：统一 A2 移植步骤并修正受管发布流程中的过期评级块要求。
 
 - v1.5.0 (2026-10-25) 页签守卫**升级为全局上限**（用户铁律「任何阶段浏览器页签 ≤10，避免卡顿」）：
-  9222+9333 合计 ≥10 即回收至 ≤9；9333 保留最新 3、9222 保留最新 1；login 仍受保护、
+  <PORT_COMMENT>+<PORT_PUBLISH> 合计 ≥10 即回收至 ≤9；<PORT_PUBLISH> 保留最新 3、<PORT_COMMENT> 保留最新 1；login 仍受保护、
   每实例至少留 1 页；www 不再受保护（评论实例残留即回收对象）。`helpers/tab_guard.py`
   同步改全局口径（默认双实例，`--port` 退化为单实例模式）；项目层新增同策略的
   `xhs_publish/comment/_tab_guard.py`。

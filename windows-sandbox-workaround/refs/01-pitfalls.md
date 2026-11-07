@@ -7,12 +7,12 @@
 
 1. **venv 的 `python.exe` 每次调用出现父子两个进程，命令行完全相同** → `tasklist`/CIM 里每个 python 任务"出现两次"。不要据此判定两个队列在跑；看 `ParentProcessId` 配对，或读 `_xhs_publish.lock` 里的 pid 认唯一持有者。
 2. **`wmic` 在本机不可用**（`FileNotFoundError [WinError 2]`）。改用 PowerShell 工具 `Get-CimInstance Win32_Process -Filter "Name='python.exe'"`。⚠️ CIM 快照会漏报仍活着的进程且不报错 → **进程清单一律以 `tasklist /FO CSV /NH` 为准**。
-3. **端口/浏览器死活判定只能用 CDP HTTP 端点 —— 裸 socket 会骗人**：`socket.connect(("127.0.0.1", 9222))` 在 Chrome 正常服务时也会超时。
+3. **端口/浏览器死活判定只能用 CDP HTTP 端点 —— 裸 socket 会骗人**：`socket.connect(("127.0.0.1", <PORT_COMMENT>))` 在 Chrome 正常服务时也会超时。
    ```python
    urllib.request.build_opener(urllib.request.ProxyHandler({})).open(
-       "http://127.0.0.1:9222/json/version", timeout=3).read(64)
+       "http://127.0.0.1:<PORT_COMMENT>/json/version", timeout=3).read(64)
    ```
-   ⚠️ 别用 `curl` 直连（走代理）；**代理的典型症状是 `HTTP 502 Bad Gateway` 不是超时**。要么 `ProxyHandler({})`，要么 `http.client.HTTPConnection("127.0.0.1", 9222)`（默认不走代理，最省心）。
+   ⚠️ 别用 `curl` 直连（走代理）；**代理的典型症状是 `HTTP 502 Bad Gateway` 不是超时**。要么 `ProxyHandler({})`，要么 `http.client.HTTPConnection("127.0.0.1", <PORT_COMMENT>)`（默认不走代理，最省心）。
 4. **`chrome.exe` 以 `code=0` 秒退不是错误**：profile 被现有实例占用时，新进程交接给老实例后立即退出。正确处置 = 退出后重新用 CDP 探针确认端口可达，可达即"复用现有 Chrome"。
 5. **PowerShell 工具 stdout 在本环境不回传**（exit 0 但无输出）→ 必须 `Set-Content` 写文件再 Read。
 6. `taskkill /PID <父> /T /F` 会连子进程一起杀；对已被连带杀掉的子 pid 再执行报 `not found` 属无害噪音。
@@ -22,9 +22,9 @@
 
 清理重复进程姿势：先 `tasklist` 拿 pid，再 CIM 补命令行归类，看 `ppid` 链，把整组（父+子）一起 kill，最后 `tasklist` 数量前后对比确认。
 
-**浏览器会被回收**：即使宿主 python 仍活着，内联启动的 Chrome 也可能中途消失（9222 无响应）。长队列要**每篇发布前**探活并自动重启 Chrome，别只在开头 `ensure_chrome()` 一次。
+**浏览器会被回收**：即使宿主 python 仍活着，内联启动的 Chrome 也可能中途消失（<PORT_COMMENT> 无响应）。长队列要**每篇发布前**探活并自动重启 Chrome，别只在开头 `ensure_chrome()` 一次。
 
-**Chrome 与启动它的 python 进程同生共死**：`chrome_launcher.py` 单独跑完即退出 → 9222 约 6 秒内拒绝连接（`CREATE_BREAKAWAY_FROM_JOB | DETACHED_PROCESS` 也拦不住）。需多命令间复用 Chrome 时，另起保活进程：
+**Chrome 与启动它的 python 进程同生共死**：`chrome_launcher.py` 单独跑完即退出 → <PORT_COMMENT> 约 6 秒内拒绝连接（`CREATE_BREAKAWAY_FROM_JOB | DETACHED_PROCESS` 也拦不住）。需多命令间复用 Chrome 时，另起保活进程：
 
 ```python
 # xhs_publish/_keep_chrome_alive.py —— 后台常驻
@@ -36,7 +36,7 @@ while True:
     if not port_open(): ensure_chrome()
 ```
 
-判据：保活进程活着 → 9222 持续可用；进程一停 → Chrome 秒级消失。
+判据：保活进程活着 → <PORT_COMMENT> 持续可用；进程一停 → Chrome 秒级消失。
 
 ## 二、本机工具链的坑
 
@@ -97,15 +97,15 @@ python <patch>/helpers/net_probe.py --wait-minutes 180 # 每 60 秒重试，最�
 > ≥1 个 → 退档无风险；0 个 → 必然回收，立刻补档。
 
 ### 实例 A（12:43，**出事**）：唯一持有者退出
-C 批 10 篇错峰发布进行到第 6 篇前，`chrome.exe` 从 `tasklist` 消失、`9222` 拒绝连接；
+C 批 10 篇错峰发布进行到第 6 篇前，`chrome.exe` 从 `tasklist` 消失、`<PORT_COMMENT>` 拒绝连接；
 但发布链进程仍在跑，看起来像"发布器挂了"。
 
 | 时刻 | 事件 |
 |---|---|
 | 11:43 | 60 分钟档 `_chrome_hold.py` 启动，`ensure_chrome()` **拉起并持有** Chrome |
 | ~12:43 | 该档 `alive 60 min` 跑满退出 → **它是当时 Chrome 的唯一持有者** → Chrome 随父进程被回收 |
-| ~12:43 | 180 分钟档 `_chrome_hold_long.py` 下一个 tick 探测到 `!! 9222 DOWN`，开始 `ensure_chrome()` 补拉 |
-| ~12:44 | 补拉输出落到日志、9222 恢复 → 但此间约 **30 秒**端口不可用 |
+| ~12:43 | 180 分钟档 `_chrome_hold_long.py` 下一个 tick 探测到 `!! <PORT_COMMENT> DOWN`，开始 `ensure_chrome()` 补拉 |
+| ~12:44 | 补拉输出落到日志、<PORT_COMMENT> 恢复 → 但此间约 **30 秒**端口不可用 |
 
 **危险点**：空窗期间任何一次发布触发都会失败。本次是 C 批 c5 恰在 **12:44:01** 发出（抢在空窗前），
 属运气；若 c6 的 `publish_interval` 恰好在 12:43:40 放行，就会丢稿。
@@ -125,9 +125,9 @@ Chrome 是**引用计数式**存活 —— 只要还有另一个 `_chrome_hold*`
 0. **前置**：`ls logs/_chrome_hold*.log` 看**有几个在持续更新**（mtime 在最近 1 分钟内）。
    - ≥1 → Chrome 有人持有，**任何档退出都不用慌**；
    - 0 → 立即补起 `_chrome_hold_xl.py`，再往下查。
-1. `logs/_chrome_hold*.log` **末行**（`alive N min | port9222=True/False`）。
+1. `logs/_chrome_hold*.log` **末行**（`alive N min | port<PORT_COMMENT>=True/False`）。
 2. `tasklist /FI "IMAGENAME eq chrome.exe" /NH`（在册数量；正常 30–40 个，多进程架构）。
-3. 才到 9222。**顺序错了会把「保活档到期」误判成「发布器故障」**。
+3. 才到 <PORT_COMMENT>。**顺序错了会把「保活档到期」误判成「发布器故障」**。
 
 ### 固化做法
 1. **总时长 > 60 分钟的批次，开跑前就起 `_chrome_hold_xl.py`（300 分钟）**，不要用 60 分钟档接力。
@@ -136,8 +136,8 @@ Chrome 是**引用计数式**存活 —— 只要还有另一个 `_chrome_hold*`
 2. **保活覆盖靠「多档叠加」，不靠单档够长**：最长档只有 300 分钟，长批次要**同时挂 2 档、起始时间错开**，
    覆盖区间互相重叠 → 任一档到期都不会让持有者归零。本日实测：13:33 起的 XL 档（→18:33）
    + 12:48 起的 XL2 档（→17:48），稳稳覆盖 D 批 17:30 的收尾。
-3. **判活顺序**见上「可操作的判活顺序」（前置数活跃档 → 日志末行 → `chrome.exe` 在册 → 9222）。
-4. **探 9222 一律用 `http.client.HTTPConnection`**。`urllib.request` **走系统代理**会返 `502 Bad Gateway`
+3. **判活顺序**见上「可操作的判活顺序」（前置数活跃档 → 日志末行 → `chrome.exe` 在册 → <PORT_COMMENT>）。
+4. **探 <PORT_COMMENT> 一律用 `http.client.HTTPConnection`**。`urllib.request` **走系统代理**会返 `502 Bad Gateway`
    （假信号）；本机代理环境实测每次都 502，与 Chrome 死活无关。
 5. Chrome 重启后 **登录态仍有效**（profile 落盘于
    `%LOCALAPPDATA%\Google\Chrome\XiaohongshuProfiles\<account>`）；标签变成 `chrome://newtab/` 属正常。

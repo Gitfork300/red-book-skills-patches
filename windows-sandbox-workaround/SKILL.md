@@ -2,7 +2,7 @@
 name: windows-sandbox-workaround
 system: shared
 version: 1.7.0
-description: "Windows 沙箱与受限会话适配：Chrome 脱离 job object、进程探活、网络可达性排查、登录态与风控规则索引、无人值守巡检失败停止与新鲜度核验。触发词：Chrome 起不来、9222 端口失效、登录态异常。"
+description: "Windows 沙箱与受限会话适配：Chrome 脱离 job object、进程探活、网络可达性排查、登录态与风控规则索引、无人值守巡检失败停止与新鲜度核验。触发词：Chrome 起不来、<PORT_COMMENT> 端口失效、登录态异常。"
 patch_for: red-book-skills
 applies_to_main_version: ">=0.1.0"
 priority: 10
@@ -50,7 +50,7 @@ created: 2026-09-04
 | 落地 URL 变 `…/login?redirectReason=401` | 会话真失效 | 重走登录，别判成"功能下线" |
 | 以为每次要重新扫码 | 登录态会落盘 profile | 扫一次即可，重启 Chrome 仍有效 |
 | 扫码窗口一闪而过 | 宿主回收 Chrome | 同一次调用内完成；用 `keep-open` |
-| `captureScreenshot` 超时 | 多半已扫码成功（页面跳 `/new/home`） | 先看 9222 落地 URL / 直接 `check-login` |
+| `captureScreenshot` 超时 | 多半已扫码成功（页面跳 `/new/home`） | 先看 <PORT_COMMENT> 落地 URL / 直接 `check-login` |
 
 ## 本机进程排查（要点，细节见 refs）
 
@@ -65,11 +65,11 @@ created: 2026-09-04
 5. PowerShell 工具 stdout 不回传 → `Set-Content` 落盘再 Read。
 6. **Chrome 是「引用计数式」存活 —— 持有者归零才被回收**：需多命令间复用 Chrome 时，另起保活进程常驻持有。
    - **❗️保活档退出是否致命，取决于「还有没有别的持有者」**（2026-09-16 两实例对照）：
-     12:43 唯一持有者（60 分钟档）退出 → Chrome 归零、9222 断；15:00 多持有者时 180 分钟档退出 → **CDP 仍 200**。
+     12:43 唯一持有者（60 分钟档）退出 → Chrome 归零、<PORT_COMMENT> 断；15:00 多持有者时 180 分钟档退出 → **CDP 仍 200**。
      ~~"档位跑满 = 一次回收"~~ 漏了前提，勿再照抄。
    - **判活前置**：`ls logs/_chrome_hold*.log` 数有几个 mtime 在最近 1 分钟内 → **≥1 则退档无风险，0 则立刻补档**。
-     再按序看：日志末行 → `chrome.exe` 是否在册（正常 30–40 个）→ 才到 9222。
-   - **补拉有约 30 秒空窗**：另一档要等下一个 tick 才探测到 `!! 9222 DOWN` 并补拉；空窗落在发布触发点就丢稿。
+     再按序看：日志末行 → `chrome.exe` 是否在册（正常 30–40 个）→ 才到 <PORT_COMMENT>。
+   - **补拉有约 30 秒空窗**：另一档要等下一个 tick 才探测到 `!! <PORT_COMMENT> DOWN` 并补拉；空窗落在发布触发点就丢稿。
    - **长批次靠「多档叠加」而非单档够长**：最长档 300 分钟，超长任务同时挂 2 档、起始时间错开、覆盖区间重叠。
      **不要用 60 分钟档「接力」**——接力点必有空窗。
    - **❗️区分「自然到期」与「被外部清理」——后者加长档位没用**（2026-09-16 D 批 t20 丢失实例）：

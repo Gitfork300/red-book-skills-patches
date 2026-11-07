@@ -30,6 +30,10 @@ SECRET_PATTERN = re.compile(
     r"|(?:\b(?:password|passwd|client_secret|api[_-]?key|access[_-]?token|refresh[_-]?token)\s*[:=]\s*[\"']?[^ \t\"']{8,})",
     re.IGNORECASE,
 )
+MACHINE_PATH_PATTERN = re.compile(
+    r"(?i)(?:\b[A-Z]:[\\/](?:Users|Documents and Settings)[\\/](?!<)[^\\/\s<>`\"']+"
+    r"|\bD:[\\/]VS-SKILL(?:[\\/]|$))"
+)
 
 
 def git(*args: str) -> list[str] | None:
@@ -89,6 +93,10 @@ def check_files() -> tuple[list[str], int]:
             if match:
                 line = text.count("\n", 0, match.start()) + 1
                 findings.append(f"credential-like content: {path.relative_to(ROOT)}:{line}")
+            path_match = MACHINE_PATH_PATTERN.search(text)
+            if path_match:
+                line = text.count("\n", 0, path_match.start()) + 1
+                findings.append(f"machine-specific path: {path.relative_to(ROOT)}:{line}")
     return findings, scanned
 
 

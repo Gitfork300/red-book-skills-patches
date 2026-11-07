@@ -6,9 +6,9 @@
 - v1.24.1 (2026-10-25)
   - 🔧 **铁律 15 Tab 守护修订**（用户铁律「任何阶段的浏览器页签都不要超过 10，避免卡顿」）：
     评论链仍自建独立 tab、用完 `finally` 关闭；「绝不碰 creator tab」由人工禁令改为
-    **全局自动口径**——`cdp_publish` 页签守卫升级为 9222+9333 合计 ≤10
-    （合计 ≥10 回收至 ≤9；9333 留最新 3、9222 留最新 1；login 受保护；每实例至少留 1 页）。
-    评论实例（9222）的 www 残留不再受保护，即回收对象。`comment/_tab_guard.py`
+    **全局自动口径**——`cdp_publish` 页签守卫升级为 <PORT_COMMENT>+<PORT_PUBLISH> 合计 ≤10
+    （合计 ≥10 回收至 ≤9；<PORT_PUBLISH> 留最新 3、<PORT_COMMENT> 留最新 1；login 受保护；每实例至少留 1 页）。
+    评论实例（<PORT_COMMENT>）的 www 残留不再受保护，即回收对象。`comment/_tab_guard.py`
     与 `core-overrides/helpers/tab_guard.py` 同步改全局口径。
 
 - v1.24.0 (2026-10-12 晚) —— **私信窗口与巡检维度改口径（用户拍板）**：

@@ -32,10 +32,10 @@ py -3 tools\setup_runtime.py
 字节码和运行临时文件）。已有 `.venv` 时，setup 明确拒绝执行，不安装依赖也不改环境；
 即使首次安装中途失败留下了目录，也须先检查并安全备份该目录。
 
-本机当前 `.venv\pyvenv.cfg` 记录的基础解释器为
-`D:\VS-SKILL\python-3.13.9\python.exe`，Python 版本 3.13.9，不继承系统 site-packages。
-这个路径是本机情况，不是新机器的要求；移动或移除基础 Python 后环境可能无法运行。
-原不可启动环境已另存为 `D:\VS-SKILL\red-book-skills-patches-venv-backup-20261106`，不应随意删除。
+每台机器的 `.venv\pyvenv.cfg` 都会记录创建它时使用的基础 Python 路径和版本；
+这是本机配置，不应复制到另一台机器，也不要照抄维护者的解释器路径。
+若基础解释器被移动或移除，环境可能无法运行。重建前按本文件的安全迁移步骤备份旧环境；
+不要覆盖已有备份。
 
 `requirements.txt` 是直接依赖的**最低版本约束，不是锁文件**。当前本机已安装
 `requests 2.34.2`、`websockets 17.4`、`opencv-python 5.0.0.93`、`Pillow 13.0.0`

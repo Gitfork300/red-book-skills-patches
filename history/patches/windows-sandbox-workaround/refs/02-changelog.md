@@ -34,17 +34,17 @@
   （`~/.workbuddy/binaries/python/versions/<ver>/python.exe`）启动则只出现一行。
   （今日曾差点把 `_start_T_after_C.py` 接力器误判为双实例误杀。）
   ③ **保活档「跑满到期」＝一次 Chrome 回收，而非发布器故障**：60 分钟档 `alive 60 min` 收尾退出时，它拉起的
-  Chrome 一并消失（`tasklist` 里 `chrome.exe` 归零、9222 拒绝连接）；**其余保活档要等下一个 30 秒 tick 才探测到
-  9222 DOWN 并补拉 → 约 30 秒空窗**。故**总时长 > 60 分钟的批次必须提前起超长档**（`_chrome_hold_xl.py` = 300 分钟），
+  Chrome 一并消失（`tasklist` 里 `chrome.exe` 归零、<PORT_COMMENT> 拒绝连接）；**其余保活档要等下一个 30 秒 tick 才探测到
+  <PORT_COMMENT> DOWN 并补拉 → 约 30 秒空窗**。故**总时长 > 60 分钟的批次必须提前起超长档**（`_chrome_hold_xl.py` = 300 分钟），
   **不能用 60 分钟档「接力」** —— 接力点必有空窗，空窗正好落在发布触发点就丢稿。
-  判定顺序固化：先看 `logs/_chrome_hold*.log` 末行 + `chrome.exe` 是否在 `tasklist`，再判 9222。
+  判定顺序固化：先看 `logs/_chrome_hold*.log` 末行 + `chrome.exe` 是否在 `tasklist`，再判 <PORT_COMMENT>。
   另：Chrome 重启后**登录态仍有效**（profile 落盘），新标签页属正常，别判成掉登录。
   来源：2026-09-16 C 批进行中（60 分钟档 11:43→12:43 到期带走 Chrome，C 批 c5 抢在空窗前 12:44:01 发出）。
 - v1.6.6 (2026-09-15 下午) 「本机工具链的坑」两处补充：
   ① 推翻 v1.6.0"Bash 失效就整轮换路径"—— 显式 `export PATH=` 指向 PortableGit 即可完全恢复，并固化三条配套铁律（shell 用 `/c/`、`cd` 偶发失败改绝对路径、`python.exe` 入参用 `C:/`）。
   ② 新增「Read/Write/Glob 对含 `()` 路径偶发失败」（Write EPERM 截断、Read/Glob 假报不存在），给出三条替代通道。来源：2026-09-15 回复标记更名 `[X]`→`[A]` 任务。
 - v1.6.5 (2026-09-15) `get-login-qrcode` 的 `captureScreenshot` 超时 ≠ 故障（扫码成功后页面跳 `/new/home`，二维码 rect 失效）。来源：用户扫码后误判为截图失败。
-- v1.6.4 (2026-09-14) ① Chrome 与启动它的 python 进程同生共死（`chrome_launcher.py` 退出后 9222 约 6 秒内被回收），需另起保活进程；② 代理典型症状是 502 非超时（`http.client.HTTPConnection` 默认不走代理）。
+- v1.6.4 (2026-09-14) ① Chrome 与启动它的 python 进程同生共死（`chrome_launcher.py` 退出后 <PORT_COMMENT> 约 6 秒内被回收），需另起保活进程；② 代理典型症状是 502 非超时（`http.client.HTTPConnection` 默认不走代理）。
 - v1.0.0 (2026-09-04) 初版，从主 SKILL.md 抽出。
 - v1.1.0 (2026-09-04) 物理迁移到 patch；与 publish-interval-guard 通过 `XHS_INTERVAL_GUARD` 解耦。
 - v1.2.0 (2026-09-11) 间隔等待 max-block 700→900、子进程超时 800→1000 秒，适配 8~12 分钟随机上界 720 秒。

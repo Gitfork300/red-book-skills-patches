@@ -51,6 +51,18 @@ class ToolGateTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "无法检查 Git"):
                 release.check_paths()
 
+    def test_release_gate_detects_machine_specific_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "INSTALL.md").write_text(
+                "Local interpreter: `C:\\Users\\PrivateUser\\Python\\python.exe`\n",
+                encoding="utf-8",
+            )
+            with patch.object(release, "ROOT", root):
+                findings, _ = release.check_files()
+        self.assertEqual(len(findings), 1)
+        self.assertIn("machine-specific path: INSTALL.md:1", findings[0])
+
     def test_failed_cleanup_blocks_doctor(self):
         def fake_step(args, **kwargs):
             if args[-1] == "clean":

@@ -129,9 +129,8 @@
 > 事故：`_gen_1006_a_covers.py` 产出的 `a1006_01`/`a1006_02` 两张封面因质量缺陷被人工删除，
 > 一度被误判为「平台风控删笔记」（见 `_BUGS.md` B-019 / B-021）。
 
-- **解释器**：封面脚本必须用
-  `C:\Users\EricSupport(DMSH)\.workbuddy\binaries\python\envs\default\Scripts\python.exe`（PIL 12.3.0）。
-  skills venv 与 managed python **都不带 PIL**，会直接 `ModuleNotFoundError`。
+- **解释器**：封面脚本使用安装指引创建的 Skill `.venv` 解释器；依赖清单包含 Pillow。
+  若使用其他解释器，先确认已安装 Pillow，避免 `ModuleNotFoundError`。
 - **标题只由 `add_common()` 出**：封面函数**禁止**再自绘同文案（如 `d.text(..., "CICAI 2026", ...)`），
   否则与 `add_common` 的标签重叠错位 —— 这就是 a1006_02 事故的根因。
 - **发布前门禁**：`python xhs_publish/_check_cover_dup.py .` 须退出码 0

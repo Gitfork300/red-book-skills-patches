@@ -23,6 +23,22 @@ setup 仅用于首次创建；已存在 `.venv` 时会拒绝修改。日常升�
 `.venv/` 的文件同步方式。推送到 GitHub 只更新仓库跟踪内容，不会上传或删除部署机器上的 `.venv/`；
 若部署工具会先清空目标目录，先停止并修改其行为，不能继续安装。
 
+### 本机变量与脱敏占位符
+
+规则和示例中的 `<WORKSPACE_ROOT>`、`<PORT_PUBLISH>`、`<PORT_COMMENT>` 是占位符，不是有效路径或可直接执行的命令参数。
+按本机实际位置或 Chrome/CDP 监听端口替换后再运行；不要将替换后的个人路径、端口写回共享 Skill 文件或提交。
+工作区路径可在当前 PowerShell 会话设置，也可写入当前用户环境变量：
+
+```powershell
+$workspaceRoot = Read-Host "Enter the local business workspace path"
+$env:XHS_WORKSPACE = $workspaceRoot
+[Environment]::SetEnvironmentVariable("XHS_WORKSPACE", $workspaceRoot, "User")
+```
+
+端口占位符只表示规则文本中的本机值。`XHS_CDP_PORT_PUBLISH` / `XHS_CDP_PORT_COMMENT` 供环境自检展示期望值，
+不是所有运行脚本通用的端口覆盖开关；请将实际端口配置到 Chrome 启动方式及所用命令支持的 `--port` 参数中。
+新安装后运行 `tools\check_env.py --fix-hint` 并按其输出完成自检。
+
 对于**全新**业务工作区，建立规则入口及空稿件目录（默认 `C:\xhs`）：
 
 ```powershell

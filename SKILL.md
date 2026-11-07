@@ -7,7 +7,7 @@ metadata:
   trigger: 小红书发布、登录、检索、评论、互动
   source: bundled-runtime
 system: shared
-version: 1.3.7
+version: 1.3.8
 ---
 
 # red-book-skills-patch

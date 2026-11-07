@@ -13,7 +13,7 @@
 | **① 分组进度表** | 每组「已建仓 / 已发布 / 待发」三列 + 明细（key+状态标记）；末行合计 | jobs 文件扫建仓；`_NNNN_pub_progress.json` 数 published |
 | **② 预计推进表** | 按当前速率推算「时段 × 预计进度 × 对应组」的推进表；给出收官 ETA 与数学账 | progress/jobs 文件 + 当前间隔守卫 IMIN/IMAX；`publish_log.json` 的 `next_gap` 只判断下一篇何时可发，不作篇数或整批进度来源 |
 | **③ 小任务进度** | 天气自动化 / 评论巡检 / 提醒登记 / Canary 计划 / 重发项 / bug 债 / 日终收口 | memory 当日日志 + automation 列表 + 各 state 文件 |
-| **④ 阻塞与风险** | 当前卡点（事故、pending、Chrome、平台侧）、需用户拍板项（≤3 条，标注 ⚠️） | 实时诊断：pending 残留、9333 LISTENING、creator 可达性 |
+| **④ 阻塞与风险** | 当前卡点（事故、pending、Chrome、平台侧）、需用户拍板项（≤3 条，标注 ⚠️） | 实时诊断：pending 残留、<PORT_PUBLISH> LISTENING、creator 可达性 |
 
 ### ① 分组进度表（**列结构固定，照抄**）
 
@@ -92,7 +92,7 @@
 ### ④ 阻塞与风险（样板）
 
 ```
-- ✅ **无阻塞**：pending 残留 0、Chrome 9333 正常 LISTENING（pid NNNN）、链运行中
+- ✅ **无阻塞**：pending 残留 0、Chrome <PORT_PUBLISH> 正常 LISTENING（pid NNNN）、链运行中
 - ⚠️ Chrome 今日已崩 N 次（HH:MM、HH:MM），现稳定；若再崩按手动命令行重建
 - ⚠️ 收官 ETA HH:MM，收口动作安排在 21:30 停链后做
 ```
@@ -105,7 +105,7 @@
 
 | 症状 | 判据 | 处置 |
 |---|---|---|
-| Chrome 崩溃/闪退 | 9333 无 LISTENING 且 chrome 进程 0；launcher 起完即退 | 手动带参起 Chrome（launcher 方式会被沙箱回收，闪退）；查 profile Singleton 锁 |
+| Chrome 崩溃/闪退 | <PORT_PUBLISH> 无 LISTENING 且 chrome 进程 0；launcher 起完即退 | 手动带参起 Chrome（launcher 方式会被沙箱回收，闪退）；查 profile Singleton 锁 |
 | 登录态失效 | check-login NOT LOGGED IN / URL 落 /login | **需用户扫码**（人工介入不可绕过）；同时全链 rc=5 快速失败不空转 |
 | 平台侧不可达 | curl creator HTTP 非 200（B-049 家族） | 等平台恢复；间隔拉到 300s/档 |
 | 稿件级失败 | 输出无环境特征、rc=3/4 | 同篇 ≥2 次移队尾，换下一篇 |

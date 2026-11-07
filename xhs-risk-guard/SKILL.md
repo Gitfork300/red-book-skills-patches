@@ -52,7 +52,7 @@ created: 2026-09-12
 | --- | --- | --- | --- |
 | D1 | 页面渲染正常但接口没发请求（网络事件 0） | `Network.enable` 参数写成 `maxPostSize`，正确名 `maxPostDataSize` | 别自搓 CDP，复用 `XiaohongshuPublisher` |
 | D2 | `上传图文 tab` 报"页面结构可能变了" | 443 TLS 握手被整段丢弃（网络问题） | 发布前跑 `net_probe.py` 探 TLS |
-| D3 | 裸 socket 探 9222 超时，以为 Chrome 没起 | loopback 裸连在正常服务时也超时 | 用 CDP HTTP 端点探活 |
+| D3 | 裸 socket 探 <PORT_COMMENT> 超时，以为 Chrome 没起 | loopback 裸连在正常服务时也超时 | 用 CDP HTTP 端点探活 |
 | D4 | `tasklist` 无 chrome.exe，以为浏览器挂了 | 本沙箱 tasklist 可能返 0 条而 Chrome 在服务 | 以 CDP 探针为准 |
 | D5 | venv python 进程"出现两次"，以为两个队列 | Windows 父子双进程、命令行相同 | 读 `_xhs_publish.lock` pid 认持有者 |
 

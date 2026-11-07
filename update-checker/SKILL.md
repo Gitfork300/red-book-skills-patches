@@ -155,7 +155,7 @@ python <patch>/helpers/update_check.py acknowledge --sha <commit-sha>
 | 文件 | 本地改动 | 若被覆盖的后果 |
 | --- | --- | --- |
 | `scripts/cdp_publish.py` | 发布按钮三级激活重试（组件事件 → 真实鼠标 → 键盘 Enter） | 发布按钮被 Creator Center 换监听后静默失败 |
-| `scripts/chrome_launcher.py` | Windows 下 Chrome 脱离 job object（`CREATE_BREAKAWAY_FROM_JOB` 等） | 启动器退出后 9222 端口约 5 秒内死掉 |
+| `scripts/chrome_launcher.py` | Windows 下 Chrome 脱离 job object（`CREATE_BREAKAWAY_FROM_JOB` 等） | 启动器退出后 <PORT_COMMENT> 端口约 5 秒内死掉 |
 | `scripts/publish_pipeline.py` | 接入 `publish-interval-guard`，发布成功后写间隔记录 | 批量发布时间隔守卫查不到记录，误判可立即发布 |
 | `SKILL.md` | 合并各 patch 规则（封面规范/写作规范/间隔/时效地域/用词） | 所有 patch 规则失效 |
 

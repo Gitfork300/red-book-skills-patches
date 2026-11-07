@@ -25,14 +25,14 @@
   - 创作中心 `_capture_note_manager_notes()` 的 token 是**账号级不可复用**（10 条同值，前缀 `YBey`），
     配 `/explore/{id}` 报 `This Page Isn't Available`。
 - 新增**铁律 25「CDP 连接必须用 XiaohongshuPublisher」**：自建 websocket 会被本机 ALL_PROXY 劫持
-  （永久挂起、无报错）；`_send()` 只接位置参数；浏览器挂了用 `chrome_launcher.py --port 9333 --restart`。
+  （永久挂起、无报错）；`_send()` 只接位置参数；浏览器挂了用 `chrome_launcher.py --port <PORT_PUBLISH> --restart`。
 - 配套脚本（工作区 `xhs_publish/`）：`_grab_chat_list.py`（私信列表）、`_read_chat.py`（读会话）、
   `_dm_send.py`（私信发送+复读核验）、`_scan_old_comments.py`（老笔记补扫）、`_grab_last_token.py`（发布后抓 token）。
 - 发布链 `_chain_live.py` 已打补丁：发布后落盘 `note_url`，从根上消除覆盖缺口。
 - 新增**铁律 26「发现评论必须以消息为中心，不要遍历笔记」**（用户 2026-09-27 指出后修正）：
   - 错法 = 枚举笔记逐篇读详情（44 篇 28 分钟，且受主页 30 条限制，靠搜索补 token，等于用蛮力重建收件箱）。
   - 对法 = 读通知页 `/notification`「评论和@」DOM，**20 秒抓 128 条**，天然覆盖所有笔记的最新评论。
-    脚本 `_scan_notif_v2.py`（修了旧版 `_scan_notifications.py` 的两个致命过时点：端口 9222→9333、
+    脚本 `_scan_notif_v2.py`（修了旧版 `_scan_notifications.py` 的两个致命过时点：端口 <PORT_COMMENT>→<PORT_PUBLISH>、
     自建 ws→cdp_publish）。要点：必须先点「评论和@」tab。
   - 分工明确：**发现走通知页，定位/回复走详情页**（通知页拿不到 note_id 与 comment_id）。
 - 新增**铁律 27「评论数据在 `detail` 里，不在顶层」**：`get_feed_detail` 返回
