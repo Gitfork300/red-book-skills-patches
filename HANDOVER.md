@@ -1,6 +1,6 @@
 # 交接卡 · 版本升级专用
 
-> 生成：2026-11-06 11:20｜当前复核：2026-11-07（root 1.3.8）｜对象：本 skill 全树（14 个 patch + root 门面）
+> 生成：2026-11-06 11:20｜当前复核：2026-11-07（root 1.3.9）｜对象：本 skill 全树（14 个 patch + root 门面）
 > 用途：把本 skill 交接给下一个 agent 做**大版本升级**。**本卡是两端唯一桥梁**，读完本页再动任何文件。
 > 本 skill 的定位（用户 11-06 明确）：**包含全部核心内容**——既能单独部署到新机器直接跑，也是本次升级的基线物。
 > 因此「卡里写的」必须等于「树里有的」；记录与实物不符时，以实物为准并当天改卡，不许留悬空描述。
@@ -17,7 +17,9 @@
 - 2026-11-06 用户手动运行完整 `doctor`，提供的输出显示 10 个步骤均为 OK；随后复核 9 个覆盖文件与交接基线一致。以下旧体检结果仅为 demo 交接时的历史记录。
 - 1.3.4 修正了过期评级块及虚拟环境说明；用户于 18:56 审查 dry-run 并备份应用两个受管文件，verify 显示 9 个文件一致。备份位于 `C:/xhs/_skill-backup/core-overrides-preapply/20261106_185625`。
 - 本机 Python、Git 安装路径及 `.venv` 备份路径均为维护机配置，不作为其他安装环境要求；安装和迁移请使用本机已安装的 Python/Git，并按 [`RUNTIME_SETUP.md`](./RUNTIME_SETUP.md) 处理现有环境。
-- root 1.3.7 已推送至 GitHub `main`（commit `ef14f26`）；本次 root 1.3.8 修订补充公开文档脱敏和占位符安装说明。
+- root 1.3.7 已推送至 GitHub `main`（commit `ef14f26`）；root 1.3.8 脱敏公开文档；root 1.3.9 明确新机器从完整仓库创建本机 `.venv`，既有环境升级时继续保留。
+- **本轮交接（2026-11-07 10:08）**：GitHub 仓库没有 `.venv/` 是预期的，`.gitignore` 排除该机器相关环境；这不影响仓库源码或新机器安装。首次安装从 GitHub clone 完整仓库，用目标机器已有的 Python 3.10+ 执行 `tools/setup_runtime.py`，确认 setup 成功且 `.venv\Scripts\python.exe --version` 可运行后，再执行 `init_runtime.py` 等后续工具。不要从 VS Code 的 Skill 展示目录复制 `.venv`，也不要为补环境删除、重克隆或整目录替换已有安装。
+- 当前本地 `main` 最新提交为 `d0c3f2d`（公开文档脱敏与安装说明）；root 1.3.9 的安装迁移说明仍是未提交工作区改动，尚未推送。上一轮验证：53 项 unittest、`check_doc_layers.py`、`check_public_release.py`、`gen_handover_baseline.py --check` 均通过；`.venv/` 仍由 `.gitignore` 排除。交接前再检查 `git status`，不要误报 1.3.9 已发布。
 - 1.3.5 从工作区分组规范提炼 `topics/14-group-rules.md` 并补全速查卡；每日待分发结果仍属于业务工作区。工作区运营脚本未随此文档迁移。
 - 1.3.6 修正过期分组任务树、`publish_log.json` 进度来源和每日结果存放口径；15 份 Patch 历史原文移至 `history/patches/`，Skill 内保留事故三列表与历史指针。
 - 本次远端核查：patches `main` 仍为 `7ef76318bd7cb3265b9322faf95e71928ff0cf38`，A2 `main` 仍为 `b043748282a57e347c52f517dfb59819121134ab`，未发现新的 core 参考提交。后续发现变更按 `UPGRADING.md` 评估并移植适用改动。
@@ -252,7 +254,7 @@ runtime/tmp 1 个文件 → 已搬到 .state/tmp（取了较新副本，sha256 4
 | P2-8 | ✅ | `INDEX.md` 表格瘦身为简要用途与各 Patch 入口 | 保留版本校验工具要求的名称、优先级和版本列；详细规则以各 Patch 为准 |
 | P2-9 | ✅ | `topics/QUICKREF.md` 汇总现行硬规则并列出八个发布 patch | 单测验证不超过 6000 字符；详细规则和工作区执行器仍需按需核查 |
 | P2-10 | ✅ 不实施 | 已评估：现架构以完整受管文件为权威源，按基线 SHA 检查双方漂移，再由 apply/verify 整文件复制；diff 会引入补丁叠加、冲突裁决和回滚语义 | 保持完整副本架构；如未来要改，须另立迁移方案及兼容测试，不把 diff 与本次更新混做 |
-| P2-11 | ✅ | `.venv/` 留在技能树内 | 已验证 `.gitignore` 排除；体积和本机扫描开销仍存在 |
+| P2-11 | ✅ | `.venv/` 仅存在于本机运行树，不属于 GitHub 云端仓库 | `.gitignore` 排除；新机器从完整仓库用系统 Python 执行 setup 创建本机环境 |
 | P2-12 | ✅ | 9 份历史快照与上游参考 clone 共 10 个旧 `red-book-skills` 入口移出仓库扫描范围 | 外置 `RELOCATION-MANIFEST.json` 记录 SHA-256；`check_skill_name_collisions.py --root .` 无撞名 |
 | P2-13 | ✅ | 明确 GitHub 不存 `.venv/`，但部署更新必须保留既有安装目录中的环境 | 安装、运行维护和升级文档一致说明：原位更新跟踪文件；禁止先删除/清空整个目录，非 Git 同步须排除 `.venv/` |
 
@@ -275,7 +277,7 @@ runtime/tmp 1 个文件 → 已搬到 .state/tmp（取了较新副本，sha256 4
 
 | patch | ver | pri | patch | ver | pri |
 | --- | --- | --- | --- | --- | --- |
-| root `SKILL.md` | 1.3.8 | — | `publish-interval-guard` | 1.6.1 | 20 |
+| root `SKILL.md` | 1.3.9 | — | `publish-interval-guard` | 1.6.1 | 20 |
 | `core-overrides` | 1.5.4 | 2 | `timeliness-window` | 1.9.1 | 22 |
 | `update-checker` | 1.5.0 | 5 | `organizer-qualification-guard` | 1.3.0 | 23 |
 | `windows-sandbox-workaround` | 1.7.0 | 10 | `publish-preflight-guard` | 1.20.0 | 25 |
@@ -375,6 +377,7 @@ root `SKILL.md` 无 `META.json`、不在 `check_patch_versions` 覆盖范围内�
 | 2026-11-06 | root 1.3.4、core-overrides 1.5.4、cover-image-rules 1.8.2 | 统一现行规则，保护使用方已安装环境，补充维护方环境方案；用户备份并应用受管说明 | 45 项 unittest、文档分层、版本、公开发布、pip check、交接基线及 9 文件 verify 通过；本次未重跑完整 doctor | Copilot / 用户 |
 | 2026-11-06 | root 1.3.5 | 补充分组强制规范及速查卡，修正索引和锁语义，重新生成交接基线 | 47 项 unittest、文档分层、版本、公开发布、pip check、交接基线、9 文件 verify 与 33 项契约检查通过；未迁移业务脚本或改变现有台账 | Copilot |
 | 2026-11-06 | root 1.3.6、cover-image-rules 1.8.3 | 修正分组任务树和台账用途冲突；二维码白名单迁入工作区状态；源码与业务状态分开备份；历史 changelog/incidents 外移并保留三列速查；确认 A2 无新提交 | 52 项 unittest、版本、文档分层、发布安全、交接基线通过；源码快照（227 文件）及业务台账快照经 SHA-256 校验；Local Agent Host 每日 10:00 已配置；更新器直连网络错误，GitHub commit API 核实 A2 仍为基线 | Copilot |
+| 2026-11-07 | root 1.3.9 | 明确首次安装从完整仓库启动，使用系统 Python 创建本机 `.venv` 并检查 setup 结果后再调用环境解释器 | 更新独立安装和常见问题说明；无运行行为变更 | Copilot |
 | 2026-11-07 | root 1.3.8 | 脱敏公开文档中的本机端口、路径和自动化标识；补充占位符与变量安装说明，强化发布门禁 | 更新文档扫描及交接基线校验；无运行行为变更 | Copilot |
 | 2026-11-07 | root 1.3.7 | 澄清 GitHub 不上传 `.venv/`，但部署更新不得删除已有环境；移除 1.3.6 未推送的过期提示；仅文档口径变更 | 更新安装、运行维护和升级文档；无运行行为变更 | Copilot |
 | | | | | |

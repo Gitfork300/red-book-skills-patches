@@ -15,13 +15,22 @@
 
 ### Q：clone 之后第一步该做什么？
 
-按 [`INSTALL.md`](./INSTALL.md) 完成环境安装、工作区初始化与门禁。新机器示例：
+按 [`INSTALL.md`](./INSTALL.md) 从 GitHub clone 完整仓库，再用系统 Python 运行 setup 创建本机 `.venv`；
+确认 `.venv\Scripts\python.exe` 已生成后，才用它初始化运行环境、工作区和门禁。
+GitHub 上没有 `.venv/` 是预期行为，不影响云端源码；本机首次 setup 会创建自己的环境。
+不要从 VS Code 展示的 Skill 文件夹复制 `.venv`，也不要在 setup 前运行 `.venv` 内的解释器。
+命令默认使用 `py -3`；若没有 Python Launcher，改用 `python tools\setup_runtime.py`：
 
 ```powershell
-py -3 tools\setup_runtime.py                 # 建 .venv + 安装 requirements.txt 全部依赖
-.\.venv\Scripts\python.exe tools\init_runtime.py   # 初始化本机状态目录
-.\.venv\Scripts\python.exe tools\init_workspace.py # 仅新工作区，已有 memory 则拒绝覆盖
-.\.venv\Scripts\python.exe tools\check_env.py --fix-hint
+py -3 tools\setup_runtime.py
+if ($LASTEXITCODE -ne 0) { throw "setup 失败，停止安装并检查 Python、pip 和网络" }
+$SkillPython = Join-Path (Get-Location) ".venv\Scripts\python.exe"
+if (-not (Test-Path $SkillPython)) { throw "未生成本机虚拟环境解释器" }
+& $SkillPython --version
+if ($LASTEXITCODE -ne 0) { throw "本机虚拟环境解释器无法启动" }
+& $SkillPython tools\init_runtime.py
+& $SkillPython tools\init_workspace.py # 仅新工作区；已有 memory 则拒绝覆盖
+& $SkillPython tools\check_env.py --fix-hint
 ```
 
 `doctor.py` 会清理生成物并可能应用覆盖层，先检查 dry-run 和现有修改，再决定执行。

@@ -5,14 +5,40 @@ A2 Fork 不参与日常运行；发现上游更新后须评估并移植适用的
 
 ## 安装
 
-需要 Git、Python 3.10+（含 pip）及 Chrome/Chromium。首次安装可从 GitHub 获取完整仓库：
+需要 Git、Python 3.10+（含 pip）及 Chrome/Chromium。首次安装必须从 GitHub 获取**完整仓库**；
+仅从 VS Code/Agent 加载 `SKILL.md` 或复制 Skill 展示目录，不能保证包含安装脚本、依赖清单和 runtime。
+首次启动 setup 使用系统 Python；它会从仓库的 `requirements.txt` 创建本机 `.venv`。只有创建成功后才调用
+`.venv\Scripts\python.exe`：
 
 ```powershell
 git clone https://github.com/Gitfork300/red-book-skills-patches.git red-book-skills-patches
 Set-Location red-book-skills-patches
-py -3 tools\setup_runtime.py
-.\.venv\Scripts\python.exe tools\init_runtime.py
+
+# 先用本机 Python 创建 .venv；优先 Python Launcher，也可使用 python 命令
+$bootstrap = Get-Command py -ErrorAction SilentlyContinue
+if ($bootstrap) {
+    & $bootstrap.Source -3 tools\setup_runtime.py
+} else {
+    $bootstrap = Get-Command python -ErrorAction Stop
+    & $bootstrap.Source tools\setup_runtime.py
+}
+if ($LASTEXITCODE -ne 0) {
+    throw "首次安装失败。确认 Python 3.10+、pip 和网络可用后，按错误信息排查；不要继续运行 .venv 命令。"
+}
+
+# 从当前仓库位置构造解释器路径，不依赖旧机器或 VS Code 缓存中的绝对路径
+$SkillPython = Join-Path (Get-Location) ".venv\Scripts\python.exe"
+if (-not (Test-Path $SkillPython)) {
+    throw "setup 未生成 $SkillPython；停止安装并检查 setup 输出。"
+}
+& $SkillPython --version
+if ($LASTEXITCODE -ne 0) { throw "新建的虚拟环境解释器无法启动；停止安装并排查。" }
+& $SkillPython tools\init_runtime.py
+if ($LASTEXITCODE -ne 0) { throw "运行环境初始化失败。" }
 ```
+
+GitHub 仓库**没有 `.venv/` 是预期行为**：该目录由 `.gitignore` 排除，不影响云端源码、规则或安装脚本；
+首次安装在本机运行 setup 时会根据仓库里的 `requirements.txt` 生成自己的 `.venv/`。已有本机环境也不会被 GitHub 推送删除。
 
 setup 需要 Python 3.10+，安装 `requirements.txt` 中的 `requests`、`websockets`、
 `opencv-python` 和 `Pillow`；后两者用于封面二维码与相似度检查。
@@ -22,6 +48,17 @@ setup 仅用于首次创建；已存在 `.venv` 时会拒绝修改。日常升�
 **更新已有安装时不得删除或整目录替换安装目录**：应在原路径更新 Git 跟踪文件，或使用明确排除
 `.venv/` 的文件同步方式。推送到 GitHub 只更新仓库跟踪内容，不会上传或删除部署机器上的 `.venv/`；
 若部署工具会先清空目标目录，先停止并修改其行为，不能继续安装。
+若 `py` 和 `python` 均不可用，先从 Python 官方安装 Python 3.10+（包含 pip）；安装完成后重新打开 PowerShell，
+回到仓库目录重跑 setup。不要尝试从 GitHub Skill 文件中下载 `.venv\Scripts`：虚拟环境是机器和路径相关产物，
+必须在目标机器本地创建。
+
+### 云端仓库没有 `.venv` 时的迁移
+
+GitHub 上缺少 `.venv/` 不需要补传，也不影响安装。若本机已有仓库目录但其中没有 `.venv/`（例如新 clone），
+保留该目录及其业务数据，在仓库根目录按上面的首次安装步骤运行 setup；它只创建本机虚拟环境并安装仓库声明的依赖，
+随后再初始化运行态。不要为补 `.venv` 删除、重克隆或整目录替换已有目录。
+若目录中有 `.venv/` 但解释器缺失或无法启动，setup 会拒绝覆盖；这属于已有环境故障，应先按
+[`RUNTIME_SETUP.md`](./RUNTIME_SETUP.md#虚拟环境的来源与维护) 备份并评估迁移，不能把它当作“环境不存在”直接重装。
 
 ### 本机变量与脱敏占位符
 
@@ -42,7 +79,7 @@ $env:XHS_WORKSPACE = $workspaceRoot
 对于**全新**业务工作区，建立规则入口及空稿件目录（默认 `C:\xhs`）：
 
 ```powershell
-.\.venv\Scripts\python.exe tools\init_workspace.py
+& $SkillPython tools\init_workspace.py
 ```
 
 初始化只复制随 Skill 分发的强制规则、建立空 `xhs_publish/` 目录；不会搬迁每日选题、稿件、排名、
@@ -54,27 +91,27 @@ $env:XHS_WORKSPACE = $workspaceRoot
 不保证跨机器已有运营行为一致。然后执行：
 
 ```powershell
-.\.venv\Scripts\python.exe tools\check_env.py --fix-hint
-.\.venv\Scripts\python.exe tools\check_doc_layers.py
-.\.venv\Scripts\python.exe core-overrides\helpers\apply_overrides.py apply --dry-run
+& $SkillPython tools\check_env.py --fix-hint
+& $SkillPython tools\check_doc_layers.py
+& $SkillPython core-overrides\helpers\apply_overrides.py apply --dry-run
 ```
 
 审查 dry-run 和现存修改；`doctor.py` 会清理覆盖层生成物并可能应用覆盖层，只在确认其影响后运行：
-`.\.venv\Scripts\python.exe tools\doctor.py`。不得跳过阻断项。常见问题见 [`HELP.md`](./HELP.md)。
+`& $SkillPython tools\doctor.py`。不得跳过阻断项。常见问题见 [`HELP.md`](./HELP.md)。
 
 ## 日常调用
 
 加载仓库根目录 [`SKILL.md`](./SKILL.md)。首次安装或更新后执行：
 
 ```powershell
-.\.venv\Scripts\python.exe tools\ensure_compatible.py
+& $SkillPython tools\ensure_compatible.py
 ```
 
 发布执行脚本的工作目录设为 `runtime/`，例如：
 
 ```powershell
 Set-Location runtime
-..\.venv\Scripts\python.exe scripts\publish_pipeline.py --help
+& $SkillPython scripts\publish_pipeline.py --help
 ```
 
 若门禁报告 `DRIFTED`、文件缺失或契约失败，应先修复；不要跳过门禁发布。

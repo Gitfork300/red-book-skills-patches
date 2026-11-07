@@ -1,5 +1,5 @@
 # 交接基线（机器可核对）
-> 生成：由 `tools/gen_handover_baseline.py` 自动产出｜root 1.3.8
+> 生成：由 `tools/gen_handover_baseline.py` 自动产出｜root 1.3.9
 > 用途：`HANDOVER.md` 的**可核对副本**。全量替换后按本页逐行比对，任何一行不符即停并回滚。
 > 纪律：改完任何受管文件必须 `python tools/gen_handover_baseline.py` 重跑本页，否则记录与实物脱钩。
 
@@ -23,7 +23,7 @@
 
 | 组件 | 版本 | 优先级 |
 | --- | --- | --- |
-| root `SKILL.md` | 1.3.8 | — |
+| root `SKILL.md` | 1.3.9 | — |
 | `core-overrides` | 1.5.4 | 2 |
 | `update-checker` | 1.5.0 | 5 |
 | `windows-sandbox-workaround` | 1.7.0 | 10 |
